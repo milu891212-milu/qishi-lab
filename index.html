@@ -2452,7 +2452,7 @@ function vwHTML(pre,g,foot){
   return `${gameHeader(g)}<div id="${pre}Bar"></div><div id="${pre}Board"></div><div id="${pre}Leg"></div>
   <div class="ctrl"><input type="range" id="${pre}Step" min="0" max="${g.len}" step="1" aria-label="手數"><span class="num sub" id="${pre}Out" style="min-width:80px;text-align:right"></span></div>
   <div class="ctrl nav5" id="${pre}Nav" role="group" aria-label="棋譜操作"><button data-nv="first" aria-label="回到開始">|‹</button><button data-nv="-10" aria-label="後退十手">‹‹ 10</button><button data-nv="-1" aria-label="上一手">‹ 1</button><button data-nv="1" aria-label="下一手">1 ›</button><button data-nv="10" aria-label="前進十手">10 ››</button><button data-nv="last" aria-label="到最後">›|</button></div>
-  <div class="ctrl" style="justify-content:center">${numSel(pre+"Num")}</div>
+  <div class="ctrl" style="justify-content:center">${numSel(pre+"Num")}${sgfBtn(pre+"Sgf")}</div>
   <div class="cap" id="${pre}Cap"></div>${foot||""}`;
 }
 function vwBind(pre,g,st,o={}){
@@ -2471,6 +2471,7 @@ function vwBind(pre,g,st,o={}){
   };
   const set=v=>{S[st]=Math.max(0,Math.min(max,v));draw()};
   q("Num").onchange=e=>{S.numMode=e.target.value;saveLS();draw()};
+  q("Sgf").onclick=e=>sgfDownload(g,e.currentTarget);
   q("Step").oninput=e=>set(+e.target.value);
   q("Nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{const v=b.dataset.nv;set(v==="first"?0:v==="last"?max:S[st]+(+v))});
   FU_KEYS=e=>{
@@ -3002,8 +3003,55 @@ function jSnapG(it,d){
 function rowGame(r){
   const mv=r.raw?r.raw.moves:rowMoves(r.m);
   return{sz:19,setup:(r.raw&&r.raw.setup)||[],moves:mv,len:mv.length,raw:{pb:r.b,pw:r.w,re:r.r,br:"",wr:""},
-    date:parseDT(r.d),dt:r.d,evt:"",win:null,hasWR:false,mist:[],c:"B",wr:[]};
+    date:parseDT(r.d),dt:r.d,evt:"",win:null,hasWR:false,mist:[],c:"B",wr:[],_row:r};
 }
+
+/* ============================================================
+   下載 SGF：檢視器正在看的那一局，存成一般的 SGF（對局資訊＋全部著手）
+   畫面上的棋譜都轉成黑第一手在右上（frameRaw 記在 raw.frameT），存檔時轉回棋譜原本的方向。
+   布局索引那種只有前 50 手的局（rowGame），先到黑方（或白方）的分片找完整的那一局
+   ============================================================ */
+async function sgfRaw(g){
+  if(g.raw&&g.raw.moves)return g.raw;   /* 研究對象的對局、自行載入的 SGF（flip7 翻過的也一樣，raw 沒動） */
+  const r=g._row;if(!r)return null;
+  if(r.raw&&r.raw.moves)return r.raw;
+  if(!INDEX)return null;
+  for(const nm of [r.b,r.w]){
+    const p=INDEX.players.find(x=>x[0]===nm);if(!p)continue;
+    const rec=(await fetchShard(p[2])).find(x=>x.d===r.d&&x.b===r.b&&x.w===r.w&&frameM(x.m.slice(0,100))===r.m);
+    if(rec)return decodeGame(rec);
+  }
+  return null;
+}
+function sgfText(raw){
+  const t=raw.frameT||0,un=p=>p&&t?tPt(p,t):p;
+  const v=s=>String(s==null?"":s).replace(/\\/g,"\\\\").replace(/]/g,"\\]");
+  const P=(k,s)=>s?`${k}[${v(s)}]`:"";
+  let h=`(;GM[1]FF[4]CA[UTF-8]AP[棋士研究室]SZ[${raw.sz||19}]`+P("PB",raw.pb)+P("BR",raw.br)+P("PW",raw.pw)+P("WR",raw.wr)
+    +P("DT",raw.dt)+P("EV",raw.evt)+P("RE",raw.re)+P("KM",raw.km);
+  const ab=(raw.setup||[]).filter(s=>s.c==="B").map(s=>`[${un(s.p)}]`).join(""),aw=(raw.setup||[]).filter(s=>s.c==="W").map(s=>`[${un(s.p)}]`).join("");
+  if(ab)h+="AB"+ab;if(aw)h+="AW"+aw;
+  h+="\n";
+  raw.moves.forEach((m,k)=>{h+=`;${m.c}[${m.p?un(m.p):""}]`;if(k%10===9)h+="\n"});
+  return h+")\n";
+}
+/* 檔名：日期 黑 vs 白（Windows 不能用的字換掉） */
+const sgfName=raw=>{const bad='/:*?"<>|\\';return [raw.dt||"日期不明",raw.pb||"黑","vs",raw.pw||"白"].join(" ").replace(/\s+/g," ").trim().split("").map(c=>bad.includes(c)||c.charCodeAt(0)<32?"_":c).join("")+".sgf"};
+async function saveText(name,text,type){
+  let dl=null;try{dl=window.claude&&window.claude.use?await window.claude.use("downloads"):null}catch(e){}
+  if(dl){try{await dl.save({filename:name,data:text});return true}catch(e){const c=dbCode(e);if(c==="declined"||c==="cancelled")return false}}
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:type||"application/octet-stream"}));a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);return true;
+}
+async function sgfDownload(g,btn){
+  if(!g||(btn&&btn.disabled))return;
+  const lab=btn?btn.textContent:"";if(btn){btn.disabled=true;btn.textContent="準備中…"}
+  let msg="";
+  try{const raw=await sgfRaw(g);if(!raw)msg="找不到這一局的完整棋譜";else await saveText(sgfName(raw),sgfText(raw),"application/x-go-sgf")}
+  catch(e){msg="下載失敗"}
+  if(btn){btn.textContent=msg||lab;setTimeout(()=>{btn.textContent=lab;btn.disabled=false},msg?2500:600)}
+}
+const sgfBtn=id=>`<button type="button" id="${id}" title="把這一局存成 SGF 檔（對局資訊＋全部著手）">下載 SGF</button>`;
 /* 定石的部分圖：那個角的 11×11 路（含中線；朝盤中央的兩邊留一點線表示盤面延伸）。
    toks＝["Xpd","Oqc",…] 或 ["Bpd","Wqc",…]；X、B 畫成黑子。o.q＝哪個角（預設右上），o.numFrom＝前幾手不標數字，o.n＝顯示幾路（預設 11） */
 const CWN=11;
@@ -4498,7 +4546,7 @@ function renderPH(ph){
   <div class="vw-layout"><div class="list gamelist" aria-label="對局列表">${lst}</div>
   <div class="vw-main"><div class="boardbox">${gameHeader(g)}<div id="vwBar"></div><div id="vwBoard"></div>
     <div class="ctrl"><button id="pm" aria-label="上一個失誤">⟨失誤</button><button id="p1" aria-label="上一手">‹</button><input type="range" id="vwStep" min="0" max="${g.len}" step="1" aria-label="手數"><button id="n1" aria-label="下一手">›</button><button id="nm" aria-label="下一個失誤">失誤⟩</button></div>
-    <div class="ctrl" style="justify-content:center">${numSel("vwNum")}<label class="numsel" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="vwRec"${S.showRec?" checked":""}> 顯示下一手的 AI 候選</label></div>
+    <div class="ctrl" style="justify-content:center">${numSel("vwNum")}<label class="numsel" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="vwRec"${S.showRec?" checked":""}> 顯示下一手的 AI 候選</label>${sgfBtn("vwSgf")}</div>
     <div id="vwLeg"></div>
     <div class="cap num" id="vwOut"></div></div>
   <div class="grid" style="gap:12px"><div id="vwCall" class="callout"></div>
@@ -4513,6 +4561,7 @@ function renderPH(ph){
   mistEl.querySelectorAll("[data-mv]").forEach(b=>b.onclick=()=>{S.move=+b.dataset.mv;drawVW(ph)});
   document.getElementById("vwNum").onchange=e=>{S.numMode=e.target.value;saveLS();drawVW(ph)};
   document.getElementById("vwRec").onchange=e=>{S.showRec=e.target.checked;saveLS();drawVW(ph)};
+  document.getElementById("vwSgf").onclick=e=>sgfDownload(g,e.currentTarget);
   document.getElementById("vwStep").oninput=e=>{S.move=+e.target.value;drawVW(ph)};
   document.getElementById("p1").onclick=()=>{S.move=Math.max(0,S.move-1);drawVW(ph)};
   document.getElementById("n1").onclick=()=>{S.move=Math.min(g.len,S.move+1);drawVW(ph)};
