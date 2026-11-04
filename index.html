@@ -7383,6 +7383,9 @@ const ADMIN_EMAILS=["haifongigo@gmail.com"];
 /* 登入時「帳號」沒有打 @ 的話，自動接上這個網域（例：haifong → haifong@qishi-lab.local）。
    共用的看棋帳號就用這種寫法建在 Firebase 後台，大家只要記「帳號＋密碼」 */
 const LOGIN_DOMAIN="qishi-lab.local";
+/* 放在棋院電腦上一直登入著的共用帳號：不顯示「登出」（選手不知道密碼，按了就要管理者再來登入）。
+   要在那台電腦登出（例如換帳號）：打開網址後面加 ?logout，例：https://milu891212-milu.github.io/qishi-lab/?logout */
+const SHARED_ACCOUNTS=["haifong@qishi-lab.local"];
 const FS_CHUNK=900000;
 const FS={app:null,auth:null,db:null,user:null,empty:false,store:null,privDb:()=>null};
 /* Firebase 的錯誤代碼 → 頁面原本用的代碼（not_granted、invalid_argument、unavailable、rate_limited） */
@@ -7476,11 +7479,15 @@ function fsInit(){
   FS.store={publish:fsPublish};FS.privDb=fsPrivDb;
   let started=false;
   const form=document.getElementById("loginForm");
+  /* 網址加 ?logout：登出這台電腦（共用帳號沒有登出按鈕時用） */
+  const qs=new URLSearchParams(location.search);
+  if(qs.has("logout")){qs.delete("logout");history.replaceState(null,"",location.pathname+(qs.toString()?"?"+qs:"")+location.hash);FS.auth.signOut().catch(()=>{})}
   FS.auth.onAuthStateChanged(u=>{
     FS.user=u;
     if(!u){if(started){location.reload();return}L.hidden=false;msg.textContent="請輸入帳號和密碼。";form.hidden=false;document.getElementById("loginUser").focus();return}
     L.hidden=true;
     const a=document.getElementById("acct");a.hidden=false;document.getElementById("acctName").textContent=(u.email||"").replace("@"+LOGIN_DOMAIN,"");
+    document.getElementById("acctOut").hidden=SHARED_ACCOUNTS.includes((u.email||"").toLowerCase());
     if(!started){started=true;boot()}
   });
   form.onsubmit=async e=>{
