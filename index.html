@@ -6739,7 +6739,7 @@ function renderAD(){
     <p style="margin-top:10px">${DEL.busy?`<span class="sub">刪除或復原進行中，請稍候…</span>`:`<button class="btn-link" id="adDelGo"${blk?" disabled":""}>到棋譜搜尋，選擇要刪除的棋譜 →</button>`}</p></section>`;
   h+=`<section class="panel" id="adRank"><div class="panel-h"><h2>重新計算排名</h2><p>排名或指標看起來沒有更新時使用</p></div>
     <p class="sub">用資料庫裡的全部對局，重新計算所有棋士的排名與各項指標（需要讀入整個資料庫，約 30 秒到 1 分鐘）。上傳、刪除、復原之後都會自動重算，平常不需要按。</p>
-    <p style="margin-top:10px"><button class="btn-link" id="upRank"${blk?" disabled":""}>重新計算排名…</button></p></section>`+fsImportPanel(false);
+    <p style="margin-top:10px"><button class="btn-link" id="upRank"${blk?" disabled":""}>重新計算排名…</button></p></section>`+fsBackupPanel()+fsImportPanel(false);
   el.innerHTML=h;
   bindUp(el);bindUpLog(el);
   const jump=id=>{const d=document.getElementById(id);if(!d)return;const stk=[document.querySelector("header.top"),document.getElementById("nav")].find(e=>e&&getComputedStyle(e).position==="sticky"&&e.getBoundingClientRect().height>0),off=(stk?stk.getBoundingClientRect().height:0)+12;scrollTo({top:d.getBoundingClientRect().top+scrollY-off,behavior:"smooth"})};
@@ -7395,7 +7395,9 @@ const fsW=p=>p.catch(e=>{const x=new Error((e&&e.message)||String(e));x.code=fsC
 async function fsGz(str){return new Uint8Array(await new Response(new Blob([str]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer())}
 async function fsUngz(u8){return await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream("gzip"))).text()}
 /* 讀一個資料檔（回傳 JSON）。逾時的話丟 AbortError（和原本 fetch 的處理相同） */
-async function fsRead(name,ms){
+async function fsRead(name,ms){return JSON.parse(await fsReadText(name,ms))}
+/* 讀一個資料檔的原文（JSON 字串，不解析：備份用） */
+async function fsReadText(name,ms){
   const run=async()=>{
     const col=FS.db.collection("files"),d=await fsW(col.doc(name).get());
     if(!d.exists){if(name==="index.json")FS.empty=true;const e=new Error("資料庫裡沒有 "+name);e.code="not_found";throw e}
@@ -7404,7 +7406,7 @@ async function fsRead(name,ms){
     const parts=[h.z.toUint8Array()];
     for(const c of await Promise.all(rest)){if(!c.exists)throw new Error(name+" 的資料不完整（缺一段）");parts.push(c.data().z.toUint8Array())}
     let len=0;parts.forEach(p=>len+=p.length);const all=new Uint8Array(len);let o=0;parts.forEach(p=>{all.set(p,o);o+=p.length});
-    return JSON.parse(await fsUngz(all));
+    return await fsUngz(all);
   };
   let tm;
   return Promise.race([run(),new Promise((_,rej)=>{tm=setTimeout(()=>{const e=new Error("逾時");e.name="AbortError";rej(e)},ms||45000)})]).finally(()=>clearTimeout(tm));
@@ -7437,7 +7439,63 @@ function fsImportPanel(first){
     <p style="margin-top:10px">${FSIMP.busy?`<span class="sub">匯入中…</span>`:`<label class="btn-link" for="fsImpIn" tabindex="0" role="button">選擇 data 資料夾…</label><input type="file" id="fsImpIn" webkitdirectory multiple hidden>`}</p>
     <p class="sub" id="fsImpMsg" style="margin-top:8px">${esc(FSIMP.msg)}</p></section>`;
 }
+/* ---------- 下載資料庫備份（管理頁）：Firestore 裡的全部資料檔 → 一個 zip（裡面是 data\*.json，解壓後就是「匯入」要選的那個資料夾） ---------- */
+const FSBK={busy:false,msg:""};
+function fsBackupPanel(){
+  if(!ROLE.admin)return "";
+  return `<section class="panel" id="fsBk"><div class="panel-h"><h2>下載資料庫備份</h2><p>把現在的整個資料庫存回電腦</p></div>
+    <p class="sub">下載一個 zip 檔（約 100 MB），解壓縮後是一個 <b>data</b> 資料夾。要還原時，在下面的「從備份還原整個資料庫」選這個資料夾就好。建議每次上傳一批棋譜後下載一次。</p>
+    <p style="margin-top:10px"><button class="btn-link" id="fsBkGo"${FSBK.busy||UP.busy||DEL.busy?" disabled":""}>下載備份（zip）</button></p>
+    <p class="sub" id="fsBkMsg" style="margin-top:8px">${esc(FSBK.msg)}</p></section>`;
+}
+/* 不壓縮的 zip（檔名用 UTF-8）。JSON 檔案總共不到 4 GB，不需要 zip64 */
+const CRCT=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+const crc32=u=>{let c=0xFFFFFFFF;for(let i=0;i<u.length;i++)c=CRCT[(c^u[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0};
+function zipStore(files){
+  const enc=new TextEncoder(),parts=[],cen=[];let off=0;
+  const d=new Date(),tm=(d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1),dt=((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate();
+  for(const f of files){
+    const nm=enc.encode(f.name),data=f.data,crc=crc32(data);
+    const h=new DataView(new ArrayBuffer(30));
+    [[0,0x04034b50,4],[4,20,2],[6,0x0800,2],[8,0,2],[10,tm,2],[12,dt,2],[14,crc,4],[18,data.length,4],[22,data.length,4],[26,nm.length,2],[28,0,2]].forEach(([o,v,n])=>n===4?h.setUint32(o,v,true):h.setUint16(o,v,true));
+    parts.push(h.buffer,nm,data);
+    const c=new DataView(new ArrayBuffer(46));
+    [[0,0x02014b50,4],[4,20,2],[6,20,2],[8,0x0800,2],[10,0,2],[12,tm,2],[14,dt,2],[16,crc,4],[20,data.length,4],[24,data.length,4],[28,nm.length,2],[30,0,2],[32,0,2],[34,0,2],[36,0,2],[38,0,4],[42,off,4]].forEach(([o,v,n])=>n===4?c.setUint32(o,v,true):c.setUint16(o,v,true));
+    cen.push(c.buffer,nm);off+=30+nm.length+data.length;
+  }
+  let cl=0;cen.forEach(x=>cl+=x.byteLength);
+  const e=new DataView(new ArrayBuffer(22));
+  [[0,0x06054b50,4],[4,0,2],[6,0,2],[8,files.length,2],[10,files.length,2],[12,cl,4],[16,off,4],[20,0,2]].forEach(([o,v,n])=>n===4?e.setUint32(o,v,true):e.setUint16(o,v,true));
+  return new Blob(parts.concat(cen,[e.buffer]),{type:"application/zip"});
+}
+async function fsBackup(){
+  if(FSBK.busy||UP.busy||DEL.busy||!ROLE.admin)return;
+  const say=t=>{FSBK.msg=t;const e=document.getElementById("fsBkMsg");if(e)e.textContent=t};
+  const bt=document.getElementById("fsBkGo");if(bt)bt.disabled=true;
+  FSBK.busy=true;
+  try{
+    say("讀取資料庫…");
+    const idxT=await fsReadText("index.json",90000),idx=JSON.parse(idxT);
+    const upl=await fsRead("uploads.json",90000);
+    const names=["rank.json","open.json","catalog.json","uploads.json"].concat(Array.from({length:idx.shards},(_,k)=>"s"+k+".json"),
+      [...new Set((upl.b||[]).map(b=>b&&b.trash).filter(t=>typeof t==="string"&&/^del-\d+\.json$/.test(t)))]);
+    const enc=new TextEncoder(),files=[];let k=0;
+    const q=names.slice();
+    await Promise.all(Array.from({length:6},async()=>{while(q.length){const n=q.shift();let t;
+      try{t=await fsReadText(n,90000)}catch(e){if(/^del-/.test(n)&&e&&e.code==="not_found"){k++;continue}throw e}
+      files.push({name:"data/"+n,data:enc.encode(t)});say(`讀取資料庫… ${++k}/${names.length}`)}}));
+    files.push({name:"data/index.json",data:enc.encode(idxT)});
+    files.sort((a,b)=>a.name.localeCompare(b.name,"en",{numeric:true}));
+    say("打包中…");
+    const blob=zipStore(files),nm=`棋士研究室備份-${fmtD(new Date())}.zip`;
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=nm;document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},60000);
+    say(`已下載「${nm}」（${files.length} 個檔案、${(blob.size/1048576).toFixed(0)} MB、${Number(idx.n).toLocaleString()} 局）。`);
+  }catch(e){say("下載備份失敗："+((e&&e.message)||e)+"。請重新整理後再試一次。")}
+  FSBK.busy=false;if(bt)bt.disabled=false;
+}
 function fsBindImport(el){
+  const bk=el.querySelector("#fsBkGo");if(bk)bk.onclick=()=>fsBackup();
   const i=el.querySelector("#fsImpIn");if(!i)return;
   i.onchange=e=>{const f=[...e.target.files];e.target.value="";if(f.length)fsImport(f)};
   const lb=el.querySelector('label[for="fsImpIn"]');if(lb)lb.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();i.click()}};
