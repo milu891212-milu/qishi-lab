@@ -1699,6 +1699,7 @@ function boardAt(g,n){
     return{out,lib};
   }
   let last=null;
+  const cap={B:0,W:0};   /* 提子數：cap.B＝黑方提掉的白子、cap.W＝白方提掉的黑子 */
   for(let k=0;k<n&&k<g.len;k++){
     const m=g.moves[k];if(!m.p){last=null;continue}
     const[x,y]=xy(m.p);
@@ -1707,13 +1708,15 @@ function boardAt(g,n){
     b[ix(x,y)]=me;num[ix(x,y)]=k+1;last=[x,y];
     for(const[nx,ny]of nb(x,y)){
       const j=ix(nx,ny);
-      if(b[j]&&b[j]!==me){const G=group(nx,ny);if(!G.lib)G.out.forEach(([ax,ay])=>{b[ix(ax,ay)]=0;num[ix(ax,ay)]=0})}
+      if(b[j]&&b[j]!==me){const G=group(nx,ny);if(!G.lib){G.out.forEach(([ax,ay])=>{b[ix(ax,ay)]=0;num[ix(ax,ay)]=0});cap[m.c]+=G.out.length}}
     }
     const G=group(x,y);
-    if(!G.lib){G.out.forEach(([ax,ay])=>{b[ix(ax,ay)]=0;num[ix(ax,ay)]=0});last=null}
+    if(!G.lib){G.out.forEach(([ax,ay])=>{b[ix(ax,ay)]=0;num[ix(ax,ay)]=0});cap[m.c==="B"?"W":"B"]+=G.out.length;last=null}   /* 自殺手：算對方提的 */
   }
-  return{b,num,last,sz};
+  return{b,num,last,sz,cap};
 }
+/* 到第 n 手為止雙方的提子數（棋盤下方那一行） */
+const capHTML=(g,n)=>{const c=boardAt(g,n).cap;return `<span class="nw" title="黑方提掉的白子 ${c.B} 顆、白方提掉的黑子 ${c.W} 顆">提子 <span class="stone b"></span> <span class="num">${c.B}</span>　<span class="stone w"></span> <span class="num">${c.W}</span></span>`};
 const HOSHI=sz=>sz>=13?[3,(sz-1)/2,sz-4]:sz>=9?[2,(sz-1)/2,sz-3]:[];
 /* 手數の表示方法。st は現在の手數 */
 function numOpts(st){
@@ -2467,7 +2470,7 @@ function vwBind(pre,g,st,o={}){
     q("Step").value=n;
     q("Out").textContent=`第 ${n} / ${max} 手`;
     const m=(g.mist||[]).find(x=>x.k+1===n);
-    q("Cap").innerHTML=`${PH[n?phaseOf(n):0]}${g.hasWR?` · 勝率 <span class="num">${g.wr[n].toFixed(1)}%</span>`:""}${m?` · <span style="color:var(--bad)">失著 −${m.drop}%</span>`:""}`;
+    q("Cap").innerHTML=`${PH[n?phaseOf(n):0]} · ${capHTML(g,n)}${g.hasWR?` · 勝率 <span class="num">${g.wr[n].toFixed(1)}%</span>`:""}${m?` · <span style="color:var(--bad)">失著 −${m.drop}%</span>`:""}`;
   };
   const set=v=>{S[st]=Math.max(0,Math.min(max,v));draw()};
   q("Num").onchange=e=>{S.numMode=e.target.value;saveLS();draw()};
@@ -4583,7 +4586,7 @@ function drawVW(ph){
   document.getElementById("vwStep").value=n;
   document.getElementById("vwLeg").innerHTML=candLegend(cands.length>0);
   const sc=cur&&cur.score!=null?` · 目數差 ${(g.c==="B"?cur.score:-cur.score)>=0?"+":""}${(g.c==="B"?cur.score:-cur.score)}`:"";
-  document.getElementById("vwOut").textContent=`第 ${n} / ${g.len} 手 · ${PH[n?phaseOf(n):0]}${g.hasWR?` · 勝率 ${g.wr[n].toFixed(1)}%`:""}${sc}`;
+  document.getElementById("vwOut").innerHTML=`第 ${n} / ${g.len} 手 · ${PH[n?phaseOf(n):0]} · ${capHTML(g,n)}${g.hasWR?` · 勝率 ${g.wr[n].toFixed(1)}%`:""}${sc}`;
   const c=document.getElementById("vwCall");
   const rk=cur==null?"":cur.srank===1?"AI 的最佳手":cur.srank>=2?`AI 讀完後排第 ${cur.srank}`:cur.srank===0?"不在 AI 的前 5 手內":"";
   if(m){
