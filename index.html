@@ -94,7 +94,8 @@ nav.pages button.on{color:var(--ink);border-bottom-color:var(--accent);font-weig
 .pill.bad{background:var(--bad-bg);color:var(--bad)}
 .meter{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
 .meter i{display:block;height:100%}
-.mrow{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(40px,1fr) 46px;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
+.mrow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(30px,1fr) auto;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
+.mrow>.num{white-space:nowrap;text-align:right}
 .mrow>span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .phase .go{font-size:12px;color:var(--accent)}
 
@@ -963,8 +964,7 @@ html.a4on body{overflow:hidden}
     <button data-p="ov" class="on">總覽</button>
     <button data-p="fu">布局研究</button>
     <button data-p="se">棋形搜尋</button>
-    <button data-p="md">中盤研究</button>
-    <button data-p="ed">官子研究</button>
+    <button data-p="md">對局檢討</button>
     <button data-p="rk">排行榜</button>
     <button data-p="cp">棋士對比</button>
     <button data-p="dt">棋譜庫</button>
@@ -1025,6 +1025,8 @@ const saveLS=()=>{try{localStorage.setItem(LSK+"-cfg",JSON.stringify({...CFG,col
    共用
    ============================================================ */
 const PH=["布局","中盤","官子"];
+/* 「大失著」用的門檻：設定裡的 10%（沒有 10% 時用第二個門檻） */
+const K10=()=>CFG.mt.indexOf(10)>=0?CFG.mt.indexOf(10):Math.min(1,CFG.mt.length-1);
 const phaseOf=n=>n<=CFG.p1?0:n<=CFG.p2?1:2;
 const PHR=()=>[`1–${CFG.p1} 手`,`${CFG.p1+1}–${CFG.p2} 手`,`${CFG.p2+1} 手以後`];
 /* 勝率損失會隨「下這手之前的形勢」大幅改變，所以依形勢帶分開看。
@@ -1957,43 +1959,39 @@ function renderOV(){
   const sub=S.col==="all"?`執黑 ${bw.n?pct(bw.w,bw.n)+"%":"—"} · 執白 ${ww.n?pct(ww.w,ww.n)+"%":"—"}`:(S.col==="B"?"執黑對局":"執白對局");
   const maxM=Math.max(...ps.map(p=>p.m),.5),maxL=Math.max(...ps.map(p=>p.loss||0),.5);
   const dates=L.map(g=>g.date).filter(Boolean);
+  const Q0=RANK&&RANK.qf?qfVals(L):{},PQ0=phaseQ(L),k10=K10();
   let h=`<div class="ovbar"><p class="sub">把目前的能力整理成一張 A4（可以印出來或存成 PDF）</p><button type="button" class="btn-link ovprint" id="ovPrint"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>列印 A4 報告</button></div><section class="kpis">
     <div class="kpi"><div class="l">局數</div><div class="v num">${n}</div><div class="s">${dates.length?`<span class="nw">${fmtD(new Date(Math.min(...dates)))}</span> ～ <span class="nw">${fmtS(new Date(Math.max(...dates)))}</span>`:"日期不明"}</div></div>
     <div class="kpi"><div class="l">勝率</div><div class="v num">${W.n?pct(W.w,W.n)+"%":"—"}</div><div class="s">${W.n?`<span class="num">${W.w}</span> 勝 <span class="num">${W.n-W.w}</span> 敗${n>W.n?`（${n-W.n} 局無結果）`:""} · `:""}${sub}</div></div>
-    <div class="kpi"><div class="l">AI 吻合度（最佳手）</div><div class="v num">${sr1All==null?"—":Math.round(sr1All)+"%"}</div><div class="s">前三選 ${sr3All==null?"—":Math.round(sr3All)+"%"}</div></div>
-    <div class="kpi"><div class="l">勝率下跌 ${CFG.mt[0]}% 以上的著手</div><div class="v num">${mistPerGame(L,0).toFixed(1)}<span style="font-size:15px"> 次/局</span></div><div class="s">${CFG.mt.slice(1).map((t,i)=>`${t}% 以上 ${mistPerGame(L,i+1).toFixed(2)} 次`).join(" · ")}</div></div>
+    ${Q0.T1x!=null?`<div class="kpi"><div class="l">AI 一致度</div><div class="v num">${Q0.T1x.toFixed(1)}%</div><div class="s">下出 AI 首選的比例・已考慮對手強弱</div></div>`
+      :`<div class="kpi"><div class="l">AI 吻合度</div><div class="v num">${sr1All==null?"—":Math.round(sr1All)+"%"}</div><div class="s">下出 AI 首選的比例（對手不在資料庫，無法考慮對手強弱）</div></div>`}
+    ${Q0.Wx!=null?`<div class="kpi"><div class="l">失著</div><div class="v num">${Q0.Wx.toFixed(2)}<span style="font-size:15px">% ／手</span></div><div class="s">勝負未定時每手掉的勝率（越少越好）・大失著 ${(mistPerGame(L,K10())||0).toFixed(2)} 次/局</div></div>`
+      :`<div class="kpi"><div class="l">大失著（勝率掉 ${CFG.mt[K10()]}% 以上）</div><div class="v num">${(mistPerGame(L,K10())||0).toFixed(2)}<span style="font-size:15px"> 次/局</span></div><div class="s">越少越好</div></div>`}
   </section>
-  <section class="panel"><div class="panel-h"><h2>各階段表現</h2><p>吻合度為 % · 失著為每局平均次數 · 右上的評價是考慮對手強弱後、同一階段全棋士中的位置 · 點擊進入各階段的研究頁</p></div><div class="phases">`;
+  <section class="panel"><div class="panel-h"><h2>各階段表現</h2><p>右上的評價＝考慮對手強弱後、同一階段全棋士中的位置 · 大失著＝勝率掉 ${CFG.mt[k10]}% 以上的著手 · 點一格進入那個階段的對局檢討</p></div><div class="phases">`;
   ps.forEach(p=>{
     const col=lab[p.p]==="good"?"var(--good)":lab[p.p]==="bad"?"var(--bad)":"var(--faint)";
     const ra=rankOf(["s3f","s3m","s3e"][p.p],p.sr3,S.rkMin),ra1=rankOf(["sf","sm","se"][p.p],p.sr1,S.rkMin),rq=phaseRank(ps,L,p.p),qOn=!!phaseQ(L),
       rl=(BAND().rank||BAND().id==="all")?rankOf(bandKey(BAND(),["f","m","e"][p.p]),p.loss,S.rkMin):null;
     h+=`<button class="phase" data-goph="${p.p}"><div class="t" style="flex-wrap:wrap;gap:6px"><h3>${PH[p.p]}</h3><span style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill ${lab[p.p]}" title="三個階段中，相對名次最好／最差的一個">${LAB[lab[p.p]]}</span>${rq?`<span class="pill ${tier(rq.pct)}" title="同一階段的全棋士中的位置（${qOn?"考慮對手強弱：布局、中盤＝每局多得的目數，官子＝收官的得失加上最佳手比例":"AI 前三選吻合度"}）">${TLAB[TIER(rq.pct)]}</span>`:""}</span></div>
       ${(()=>{
-        const sfx=["f","m","e"][p.p];
-        /* 順序固定：完全一致 → 前三選一致 → 下跌幅度由小到大 */
-        const rows=[
-          {ck:"sa",dir:1,lab:"AI 吻合度（最佳手）",v:p.sr1,w:p.sr1||0,txt:p.sr1==null?"—":Math.round(p.sr1)+"%"+(OA[["sf","sm","se"][p.p]]==null?"":`<small class="ox">對手 ${Math.round(OA[["sf","sm","se"][p.p]])}%</small>`),c:"var(--accent)"},
-          {ck:"s3a",dir:1,lab:"AI 吻合度（前三選）",v:p.sr3,w:p.sr3||0,txt:p.sr3==null?"—":Math.round(p.sr3)+"%"+(OA[["s3f","s3m","s3e"][p.p]]==null?"":`<small class="ox">對手 ${Math.round(OA[["s3f","s3m","s3e"][p.p]])}%</small>`),c:"var(--accent)"}
-        ];
-        CFG.mt.map((t,i)=>[t,i]).sort((x,y)=>x[0]-y[0]).forEach(([t,i])=>{
-          const mx=Math.max(...ps.map(q=>q.mpg[i]||0),0.001),v=p.mpg[i];
-          rows.push({ck:"N"+t+"a",dir:-1,lab:`勝率 −${t}% 以上的著手`,v,w:(v||0)/mx*100,
-            txt:v==null?"—":(v>=10?v.toFixed(1):v.toFixed(2)),c:col});
-        });
-        return rows.map(r=>`<div class="mrow" title="${r.dir>0?"越高越強":"越低越強"}"><span>${r.lab}</span><div class="meter"><i style="width:${Math.max(0,Math.min(100,r.w))}%;background:${r.c}"></i></div><span class="num">${r.txt}</span></div>`).join("");
+        const rows=[];
+        if(PQ0&&PQ0[PQID[p.p]]!=null)rows.push({dir:1,lab:"比平均棋士",w:rq?(1-rq.pct)*100:0,txt:qfMain(PQID[p.p],PQ0[PQID[p.p]],PQ0)+(p.p<2?"／局":"／手"),c:"var(--accent)"});
+        else rows.push({dir:1,lab:"AI 吻合度",w:p.sr1||0,txt:p.sr1==null?"—":Math.round(p.sr1)+"%",c:"var(--accent)"});
+        const mx=Math.max(...ps.map(q=>q.mpg[k10]||0),0.001),v=p.mpg[k10];
+        rows.push({dir:-1,lab:"大失著",tip:`勝率掉 ${CFG.mt[k10]}% 以上的著手，每局幾次`,w:(v||0)/mx*100,txt:v==null?"—":v.toFixed(2)+" 次/局",c:col});
+        return rows.map(r=>`<div class="mrow" title="${r.tip?r.tip+"・":""}${r.dir>0?"越高越強":"越低越強"}"><span>${r.lab}</span><div class="meter"><i style="width:${Math.max(0,Math.min(100,r.w))}%;background:${r.c}"></i></div><span class="num">${r.txt}</span></div>`).join("");
       })()}
-      ${ra?`<span class="sub">同階段全棋士中　最佳手 <span class="num">${ra1?ra1.rank+"/"+ra1.n:"—"}</span>　前三選 <span class="num">${ra.rank}/${ra.n}</span></span>`:""}
-      <span class="go">進入${PH[p.p]}研究 →</span></button>`;
+      <span class="go">看${PH[p.p]}的對局檢討 →</span></button>`;
   });
-  h+=`</div></section>${relPanel(L)}${bandPanel(L)}<section class="two"><div class="panel"><div class="panel-h"><h2>分析報告</h2><p>依資料自動整理</p></div>${report(L,ps)}</div>
+  h+=`</div></section>${relPanel(L)}<section class="two"><div class="panel"><div class="panel-h"><h2>分析報告</h2><p>依資料自動整理</p></div>${report(L,ps)}</div>
   ${trend3Panel(L)}</section>
-  <section class="panel"><div class="panel-h"><h2>近期對局</h2><p>點擊開啟中盤研究</p></div><div class="list">`;
+  <section class="panel"><div class="panel-h"><h2>近期對局</h2><p>點一局開啟對局檢討</p></div><div class="list">`;
   L.slice(0,S.ovMore).forEach(g=>{
     const o=OPEN[g.f];
     h+=`<button class="row grow4" data-game="${g.id}"><span class="num">${fmtS(g.date)}</span>
     <span style="display:flex;gap:8px;align-items:center;min-width:0">${stoneI(g.c)}<span class="chip" style="background:${o?o.col:"var(--faint)"}"></span><span class="ell">vs ${esc(g.opp)}<br><span class="sub">${o?esc(o.label):""}${g.evt?" · "+esc(g.evt):""}</span></span></span>
-    <span class="sub num">損失 ${fx(g.lossAll,2)}%</span><span class="${g.win===true?"res-w":g.win===false?"res-l":"sub"}">${esc(g.res)}</span></button>`;
+    <span class="sub num">${g.hasWR?`大失著 ${g.mtC[k10]?g.mtC[k10].reduce((a,b)=>a+b,0):0}`:""}</span><span class="${g.win===true?"res-w":g.win===false?"res-l":"sub"}">${esc(g.res)}</span></button>`;
   });
   h+=`</div>${moreBtn(Math.min(S.ovMore,n),n,"ov")}</section>`;
   el.innerHTML=h;
@@ -2231,7 +2229,13 @@ function report(L,ps){
 
   /* 1. 最近的趨勢 */
   const t=[];
-  if(L.length>=10){
+  const QA=L.length>=10&&RANK&&RANK.qf?qfVals(L.slice(0,Math.floor(L.length/2))):null,QB=QA?qfVals(L.slice(Math.floor(L.length/2))):null;
+  if(QA&&QA.T1x!=null&&QB.T1x!=null){
+    const h=Math.floor(L.length/2),A=summarize(L.slice(0,h)),B=summarize(L.slice(h)),d1=QA.T1x-QB.T1x;
+    t.push(`最近 ${A.n} 局與之前 ${B.n} 局相比，AI 一致度 ${QA.T1x.toFixed(1)}%（${arrow(d1,true)} 點），${Math.abs(d1)<1?"大致持平":d1>0?"<b>進步</b>":"<b>退步</b>"}。`);
+    if(QA.Wx!=null&&QB.Wx!=null){const dw=QA.Wx-QB.Wx;t.push(`失著：勝負未定時每手掉 ${QA.Wx.toFixed(2)}%，之前是 ${QB.Wx.toFixed(2)}%（${Math.abs(dw)<0.05?"差不多":dw<0?'<span class="up">變少</span>':'<span class="down">變多</span>'}）。`)}
+    if(A.win!=null&&B.win!=null)t.push(`勝率 ${Math.round(A.win)}%（${A.ww} 勝 ${A.wn-A.ww} 敗）、之前是 ${Math.round(B.win)}%（${arrow(A.win-B.win,true)} 點）。`);
+  }else if(L.length>=10){
     const h=Math.floor(L.length/2),A=summarize(L.slice(0,h)),B=summarize(L.slice(h));
     const d1=(A.sr1!=null&&B.sr1!=null)?A.sr1-B.sr1:null;
     const d3=(A.sr3!=null&&B.sr3!=null)?A.sr3-B.sr3:null;
@@ -2290,15 +2294,15 @@ function report(L,ps){
   const a=[];
   if(pc.every(x=>x!=null)){
     const bad=[0,1,2].sort((x,y)=>pc[y]-pc[x])[0];
-    const mi=CFG.mt.map((th,i)=>({th,v:ps[bad].mpg[i]}));
-    a.push(`優先補強<b>${PH[bad]}</b>。這個階段每局有 ${mi[0].v.toFixed(2)} 次勝率下跌 ${mi[0].th}% 以上的著手。`+lnk(`逐手檢查${PH[bad]}的失著`,"ph:"+bad));
+    const k=K10();
+    a.push(`優先補強<b>${PH[bad]}</b>。這個階段每局有 ${(ps[bad].mpg[k]||0).toFixed(2)} 次大失著（勝率掉 ${CFG.mt[k]}% 以上）。`+lnk(`逐手檢查${PH[bad]}的失著`,"ph:"+bad));
   }
   const losses=L.filter(g=>g.win===false),close=losses.filter(g=>g.margin!=null&&g.margin<=1.5);
   if(close.length>=2)a.push(`負局 ${losses.length} 局中 ${close.length} 局是 1.5 目以內——<b>官子的得失直接決定勝負</b>，值得優先練。`+lnk("查看官子棋譜","ph:2"));
   const fs=OPEN.map(o=>{const g=L.filter(x=>x.f===o.i);const v=winRate(g);return{o,n:g.length,wn:v.n,w:pct(v.w,v.n)}}).filter(x=>x.n>=3&&x.wn>=3);
   if(fs.length){
     const lo=[...fs].sort((x,y)=>x.w-y.w)[0];
-    if(lo.w<45)a.push(`布局「${esc(lo.o.label)}」${lo.n} 局只有 ${lo.w}% 勝率，重新檢討這個下法或改用別的。`+lnk("查看這個布局的實戰","rc:"+lo.o.i));
+    if(lo.w<45)a.push(`布局「${esc(lo.o.label)}」${lo.n} 局只有 ${lo.w}% 勝率，重新檢討這個下法或改用別的。`+lnk("看常用布局","fu:op"));
   }
   const big=CFG.mt.indexOf(20)>=0?mistPerGame(L,CFG.mt.indexOf(20)):null;
   if(big!=null&&big>=1.5)a.push(`每局平均 ${big.toFixed(2)} 次掉 20% 以上的大失著，數量偏多。先減少大崩比提升細部精度有效。`);
@@ -2311,7 +2315,7 @@ function report(L,ps){
   if(old.length>=3){
     const top=x=>{const m={};x.forEach(g=>{if(g.f>=0)m[g.f]=(m[g.f]||0)+1});const e=Object.entries(m).sort((p,q)=>q[1]-p[1])[0];return e?[+e[0],e[1]]:null};
     const tr=top(rec),to=top(old);
-    if(tr&&to&&tr[0]!==to[0]&&tr[1]>=2)o5.push(`最近 ${rec.length} 局有 ${tr[1]} 局走「${esc(OPEN[tr[0]].label)}」，之前以「${esc(OPEN[to[0]].label)}」為主，布局有變化。`+lnk("查看近期布局","fu:recent"));
+    if(tr&&to&&tr[0]!==to[0]&&tr[1]>=2)o5.push(`最近 ${rec.length} 局有 ${tr[1]} 局走「${esc(OPEN[tr[0]].label)}」，之前以「${esc(OPEN[to[0]].label)}」為主，布局有變化。`+lnk("看常用布局","fu:op"));
   }
   o5.push(`要準備對局時，用<b>布局樹</b>看對手從第 1 手開始各選了什麼、各自的勝率，可以找出勝率低的分枝把對手引過去。`+lnk("打開布局樹","fu:tree"));
   if(L.length<20)o5.push(`目前只有 ${L.length} 局，數值容易晃動。期間選「全部」會比較穩定。`);
@@ -2414,7 +2418,7 @@ function trendSVG(L,ph,click){
    ============================================================ */
 let FU_KEYS=null;
 document.addEventListener("keydown",e=>{if(FU_KEYS)FU_KEYS(e)});
-const FUT=[["op","常用布局"],["js","常用定石"],["tree","布局樹"],["recent","近期對局"]];
+const FUT=[["op","常用布局"],["js","常用定石"],["tree","布局樹"]];   /* 「近期對局」拿掉了（和總覽、對局檢討的清單重複） */
 const fuTabs=()=>`<div class="tabs" id="fuTabs">${FUT.map(([k,l])=>`<button data-t="${k}" class="${S.fuTab===k?"on":""}">${l}</button>`).join("")}</div>`;
 function bindFuTabs(el){
   el.querySelectorAll("#fuTabs button").forEach(b=>b.onclick=()=>{S.fuTab=b.dataset.t;S.fuSel=null;S.fuStep=null;S.rcF=null;renderFU()});
@@ -2501,7 +2505,6 @@ function renderFU(){
   }
   if(S.fuTab==="tree")return renderTree(el,L);
   if(S.fuTab==="js")return renderJS(el,L);
-  if(S.fuTab==="recent")return renderRecent(el,L);
   return renderOP(el,L);
 }
 
@@ -2634,7 +2637,7 @@ function renderOP(el,L){
       :`<button class="row grow4 ${x.g===selG?"on":""}" data-og="${x.g.id}"><span class="num">${fmtS(x.g.date)}</span><span class="ell">${stoneI(x.g.c)} vs ${esc(x.g.opp)} <span class="sub">${esc(x.g.evt)}</span></span><span class="sub num">布局 ${fx(x.g.loss[0],2)}%</span><span class="${resCls(x.g)}">${esc(x.g.res)}</span></button>`).join("");
     const foot=all
       ?`${flipNote}<div class="cap sub">布局索引只收前 ${JLIM} 手</div><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn-link" data-opo="b">以 ${esc(selRow.r.b)} 為研究對象打開 →</button><button class="btn-link" data-opo="w">以 ${esc(selRow.r.w)} 為研究對象打開 →</button></div>`
-      :`${flipNote}<div class="cap"><span class="sub">${who()} 執${selG.c==="B"?"黑":"白"}</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn-link" data-ogo="1">這局的中盤 →</button><button class="btn-link" data-ogo="2">這局的官子 →</button></div>`;
+      :`${flipNote}<div class="cap"><span class="sub">${who()} 執${selG.c==="B"?"黑":"白"}</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn-link" data-ogo="1">這局的中盤檢討 →</button><button class="btn-link" data-ogo="2">這局的官子檢討 →</button></div>`;
     h+=`<section class="panel" id="opDetail"><div class="panel-h"><h2>前 ${selLv} 手是這個布局的實戰</h2><p>${its.length} 局${dd?` · ${winLab} ${Math.round(w/dd*100)}%（${w} 勝 ${dd-w} 敗）`:""}${its.length>200?" · 列出最新的 200 局":""}</p></div>
     <div class="fu-layout"><div><div class="list">${lst}</div></div>
     <div class="boardbox">${vwHTML("op",vg,foot)}</div></div></section>`;
@@ -2685,7 +2688,7 @@ function renderRecent(el,L){
   ${fo?`<div class="jfollow">${opIcon(fo)}<span>只列出「${esc(fo.label)}」的實戰（${LF.length} 局）</span><button class="btn-link" id="rcUnf">✕ 不限布局</button></div>`:""}
   <div class="fu-layout"><div><div class="list">${rl.map(x=>`<button class="row rrow ${x.id===sel?"on":""}" data-sel="g${x.id}"><span class="num">${fmtS(x.date)}</span>${ico(x)}<span class="ell">${stoneI(x.c)} vs ${esc(x.opp)}<br><span class="sub">${x.f>=0?esc(OPEN[x.f].label):"—"}</span></span><span class="${resCls(x)}">${esc(x.res)}</span></button>`).join("")}</div>${moreBtn(Math.min(S.fuMore,LF.length),LF.length,"fu")}</div>
   <div class="boardbox">${vwHTML("fu",g,`<div class="cap">${grp?esc(grp.label):""}　<span class="sub">${who()} 執${g.c==="B"?"黑":"白"}</span></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn-link" data-ogo="1">這局的中盤 →</button><button class="btn-link" data-ogo="2">這局的官子 →</button></div>`)}</div></div></section>`;
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn-link" data-ogo="1">這局的中盤檢討 →</button><button class="btn-link" data-ogo="2">這局的官子檢討 →</button></div>`)}</div></div></section>`;
   bindFuTabs(el);
   el.querySelectorAll("[data-sel]").forEach(b=>b.onclick=()=>{S.fuSel=b.dataset.sel;S.fuStep=null;renderFU()});
   el.querySelectorAll("[data-opgo]").forEach(b=>b.onclick=()=>{const o=OPEN[+b.dataset.opgo];S.rcF=o&&opId(o)!==S.rcF?opId(o):null;S.fuSel=null;S.fuStep=null;S.fuMore=3;renderFU()});
@@ -3377,7 +3380,7 @@ function renderJS(el,L){
     if(sel){
       vg=sel.g||rowGame(sel.r);
       const foot=sel.g?`<div class="cap sub">這個定石在這局的${JCN[sel.s.q]}角</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn-link" data-jvo="1">在中盤研究打開這局 →</button></div>`
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn-link" data-jvo="1">在對局檢討打開這局 →</button></div>`
         :`<div class="cap sub">這個定石在這局的${JCN[sel.s.q]}角 · 布局索引只收前 ${JLIM} 手</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn-link" data-jvr="b">以 ${esc(sel.r.b)} 為研究對象打開 →</button><button class="btn-link" data-jvr="w">以 ${esc(sel.r.w)} 為研究對象打開 →</button></div>`;
       h+=`<div id="jsView" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--line)"><div class="boardbox" style="max-width:460px;margin-inline:auto">${vwHTML("jv",vg,foot)}</div></div>`;
@@ -3949,10 +3952,10 @@ function relPanel(L){
   ${posSum(L,CV,AX)}
   ${qOn&&(S.per!=="n0"||S.col!=="all")?`<p class="note-f">目前的數字只用<b>${[S.per!=="n0"?(()=>{const o=document.getElementById("scope");return o&&o.selectedIndex>=0?o.options[o.selectedIndex].textContent:"選定期間"})():"",S.col!=="all"?(S.col==="B"?"執黑":"執白"):""].filter(Boolean).join("・")}</b>的對局計算；參考線（平均、前 10%、第 1 名）是全部棋士<b>全期間、黑白合計</b>的數字，所以可能比「第 1 名」還高（第 1 名也可能就是本人的全期間成績）。</p>`:""}
   <div class="relwrap"><div class="rgrid">${cells}</div>
-  <div class="radarbox">${rdCtl(rdCan(rd))}${rd.every(x=>x.pct==null&&x.dev==null)?"":radarSVG([{col:"var(--accent)",data:rd}],AX)}
+  <div class="radarbox">${rd.every(x=>x.pct==null&&x.dev==null)?"":radarSVG([{col:"var(--accent)",data:rd}],AX)}
     ${radarLegend([[S.subject||"這位棋士","var(--accent)"]],S.rdMode==="abs",S.rdMode==="abs"&&S.rdBand&&rdCan(rd))}
     ${regSel().length||S.rkMin!==20?`<p class="sub" style="text-align:center">卡片上的「頂尖」等評價是${esc(regLabel())}（${MINL(S.rkMin)}）中的位置。</p>`:""}
-    <details class="more"><summary>圖的畫法與誤差範圍</summary><p class="sub">${rdNote(rdCan(rd))}</p></details></div></div>
+    <details class="more"${S.rdOpen?" open":""}><summary>圖的設定（畫法、參考線、誤差範圍）</summary>${rdCtl(rdCan(rd))}<p class="sub">${rdNote(rdCan(rd))}</p></details></div></div>
   <div class="rleg"><span><i style="background:var(--good)"></i>頂尖（前 10%）</span><span><i style="background:var(--good)"></i>優秀（前 25%）</span><span><i style="background:var(--accent)"></i>中上</span><span><i style="background:var(--warn)"></i>中下</span><span><i style="background:var(--bad)"></i>偏弱（後 25%）</span></div>
   <details class="more"><summary>怎麼看・數字怎麼算的</summary>  ${qOn?`<p class="sub" style="margin-top:8px">卡片：<b>大數字</b>是實際表現，下面一行是它的意思，再下面是參考線（平均、前 10%、第 1 名，顏色和圖上的線一樣，可在卡片下方、圖的上方選擇要不要顯示）。${S.rdMode==="abs"?"長條越右越好（右端＝第 1 名）。":"長條＝名次。"}失著是「勝負未定（勝率 10–90%）時每手平均損失的勝率」。</p>`:""}<p class="sub" style="margin-top:8px">原本的 AI 吻合度會被對手強弱拉偏：強的棋士遇到的對手也強、棋局更難，數字反而不好看。所以這裡每一局都和同一局的對手比（同一盤棋、同樣的難度），再加上對手本身的水準。布局、中盤是「每局比平均棋士多賺幾目」（20 局以上棋士的平均＝0），官子看兩個數字：目數差 15 目以內時每手比平均棋士多賺幾目和官子下出最佳手的比例，名次與長條是兩者一起評價的；等級分只看勝負。相對位置是把目前畫面上的數值，放進全棋士全期間的分布來看。期間篩選得很窄時局數少、數值會晃動，名次僅供參考。<button class="link" data-goto-rk style="border:0;background:none;color:var(--accent);cursor:pointer;padding:0">看完整排行榜 →</button></p></details></section>`;
 }
@@ -4517,20 +4520,23 @@ async function openFound(row,side){
 /* ============================================================
    中盤 / 官子
    ============================================================ */
-const PAGE_OF=[null,"md","ed"];
+/* 對局檢討：一頁，上面切換布局／中盤／官子（S.rvPh）。舊的「官子研究」頁（ed）也導到這裡 */
+const PAGE_OF=["md","md","md"];
 function firstMove(g,ph){const m=g.mist.find(x=>x.ph===ph);return m?m.k+1:Math.min(g.len,[1,CFG.p1+1,CFG.p2+1][ph])}
-function openGame(id,ph){S.game=id;const g=GAMES.find(x=>x.id===id);if(g)S.move=firstMove(g,ph);go(PAGE_OF[ph])}
+function openGame(id,ph){S.game=id;S.rvPh=ph;const g=GAMES.find(x=>x.id===id);if(g)S.move=firstMove(g,ph);go("md")}
 function goPhase(p){
-  if(p===0){S.fuTab="recent";S.fuSel=null;S.fuStep=null;S.rcF=null;S.fuMore=3;go("fu");return}
   const L=gs();
   const worst=[...L].sort((a,b)=>(b.loss[p]||0)-(a.loss[p]||0))[0];
-  if(worst)openGame(worst.id,p);else go(PAGE_OF[p]);
+  if(worst)openGame(worst.id,p);else{S.rvPh=p;go("md")}
 }
 function renderPH(ph){
-  const el=document.getElementById("page-"+PAGE_OF[ph]);
+  const el=document.getElementById("page-md");
+  /* 上方的階段切換 */
+  const phSel=`<section class="panel" style="padding:12px 18px"><div class="toprow"><h2>對局檢討</h2><span class="segw"><span class="seglab">看哪個階段</span>${segHTML("rvPh",ph,[0,1,2].map(i=>[i,`${PH[i]}（${PHR()[i]}）`]))}</span></div></section>`;
+  const bindPh=()=>el.querySelectorAll("#rvPh button").forEach(b=>b.onclick=()=>{S.rvPh=+b.dataset.v;const g0=GAMES.find(x=>x.id===S.game);if(g0)S.move=firstMove(g0,S.rvPh);renderPH(S.rvPh)});
   if(!GAMES.length){el.innerHTML=emptyPanel(DSERR||"選擇研究對象，或載入 SGF 棋譜。");bindEmpty(el);return}
   const L=gs();
-  if(!L.length){el.innerHTML=`<section class="panel"><h2>${PH[ph]}研究</h2><p class="sub">這個條件下沒有對局。請調整期間或執黑／執白。</p></section>`;return}
+  if(!L.length){el.innerHTML=phSel+`<section class="panel"><p class="sub">這個條件下沒有對局。請調整期間或執黑／執白。</p></section>`;bindPh();return}
   if(!L.find(g=>g.id===S.game)){S.game=L[0].id;S.move=firstMove(L[0],ph)}
   const g=GAMES.find(x=>x.id===S.game);
   const ps=phaseStats(L),p=ps[ph],others=ps.filter(x=>x.p!==ph);
@@ -4539,15 +4545,16 @@ function renderPH(ph){
   const lst=L.map(x=>{const cnt=x.mist.filter(m=>m.ph===ph).length;
     return `<button class="row ${x.id===g.id?"on":""}" data-game="${x.id}" style="grid-template-columns:minmax(0,1fr) auto"><span style="display:flex;gap:6px;align-items:center;min-width:0">${stoneI(x.c)}<span class="ell"><span class="num sub">${fmtS(x.date)}</span><br>vs ${esc(x.opp)}<br><span class="sub">−${CFG.th1}% 以上 ${cnt} 手 · 損失 ${x.loss[ph]==null?"—":fx(x.loss[ph],2)+"%／手"}</span></span></span><span class="${x.win===true?"res-w":x.win===false?"res-l":"sub"}" style="font-size:12px">${esc(x.res)}</span></button>`}).join("");
   const mis=g.mist.filter(m=>m.ph===ph);
-  el.innerHTML=`<section class="kpis">
-    <div class="kpi"><div class="l">${PH[ph]}每手勝率損失<span class="sub">（${BAND().short}）</span></div><div class="v num">${fx(p.loss,2)}<span style="font-size:15px">%</span></div><div class="s">${others.map(o=>`${PH[o.p]} ${fx(o.loss,2)}`).join(" · ")}</div></div>
-    <div class="kpi"><div class="l">${PH[ph]} AI 吻合度（前三選）</div><div class="v num">${p.sr3==null?"—":Math.round(p.sr3)+"%"}</div><div class="s">${others.map(o=>`${PH[o.p]} ${o.sr3==null?"—":Math.round(o.sr3)+"%"}`).join(" · ")}</div></div>
-    <div class="kpi"><div class="l">每局失著</div><div class="v num">${p.m.toFixed(1)} <span style="font-size:15px;color:var(--muted)">/ ${p.big.toFixed(1)}</span></div><div class="s">勝率 −${CFG.th1}% 以上 ／ −${CFG.th2}% 以上</div></div>
+  const PQ=phaseQ(L),pid=PQID[ph],k10=K10(),rq=phaseRank(ps,L,ph);
+  el.innerHTML=phSel+`<section class="kpis">
+    <div class="kpi"><div class="l">${PH[ph]}比平均棋士</div><div class="v num">${PQ&&PQ[pid]!=null?qfMain(pid,PQ[pid],PQ)+(ph<2?"／局":"／手"):"—"}</div><div class="s">${PQ&&PQ[pid]!=null?(rq?`評價 ${TLAB[TIER(rq.pct)]} · `:"")+"已考慮對手強弱":"考慮對手強弱的數字算不出來"}</div></div>
+    <div class="kpi"><div class="l">${PH[ph]}大失著（勝率掉 ${CFG.mt[k10]}% 以上）</div><div class="v num">${p.mpg[k10]==null?"—":p.mpg[k10].toFixed(2)}<span style="font-size:15px"> 次/局</span></div><div class="s">${others.map(o=>`${PH[o.p]} ${o.mpg[k10]==null?"—":o.mpg[k10].toFixed(2)}`).join(" · ")}</div></div>
+    <div class="kpi"><div class="l">每局標記的失誤</div><div class="v num">${p.m.toFixed(1)} <span style="font-size:15px;color:var(--muted)">/ ${p.big.toFixed(1)}</span></div><div class="s">勝率 −${CFG.th1}% 以上 ／ −${CFG.th2}% 以上</div></div>
     <div class="kpi"><div class="l">${PH[ph]}最差的一局</div><div class="v num" style="font-size:20px">${fmtS(worstG.date)}</div><div class="s">vs ${esc(worstG.opp)} · ${fx(worstG.loss[ph],2)}%／手</div></div>
   </section>
   <section class="panel"><div class="panel-h"><h2>${PH[ph]} AI 吻合度（最佳手）走勢</h2><p>${R[ph]} · 舊 → 新 · 越高越好 · 點擊圓點開啟該局</p></div>${trendSVG(L,ph,true)}
     <div class="legend"><span><span class="chip" style="background:var(--good);border-radius:50%"></span>勝</span><span><span class="chip" style="background:var(--bad);border-radius:50%"></span>負</span><span>外框：目前選擇的對局</span></div></section>
-  <section class="panel"><div class="panel-h"><h2>${PH[ph]}研究（${R[ph]}）</h2><p>${fmtD(g.date)} · vs ${esc(g.opp)}${g.oppRank?" "+esc(g.oppRank):""}${g.evt?" · "+esc(g.evt):""} · ${who()}${g.c==="B"?"執黑":"執白"} · <span class="${g.win===true?"res-w":g.win===false?"res-l":"sub"}">${esc(g.res)}</span></p></div>
+  <section class="panel"><div class="panel-h"><h2>${PH[ph]}（${R[ph]}）逐手檢討</h2><p>${fmtD(g.date)} · vs ${esc(g.opp)}${g.oppRank?" "+esc(g.oppRank):""}${g.evt?" · "+esc(g.evt):""} · ${who()}${g.c==="B"?"執黑":"執白"} · <span class="${g.win===true?"res-w":g.win===false?"res-l":"sub"}">${esc(g.res)}</span></p></div>
   <div class="vw-layout"><div class="list gamelist" aria-label="對局列表">${lst}</div>
   <div class="vw-main"><div class="boardbox">${gameHeader(g)}<div id="vwBar"></div><div id="vwBoard"></div>
     <div class="ctrl"><button id="pm" aria-label="上一個失誤">⟨失誤</button><button id="p1" aria-label="上一手">‹</button><input type="range" id="vwStep" min="0" max="${g.len}" step="1" aria-label="手數"><button id="n1" aria-label="下一手">›</button><button id="nm" aria-label="下一個失誤">失誤⟩</button></div>
@@ -4559,6 +4566,7 @@ function renderPH(ph){
     <div class="legend"><span><span class="chip" style="background:var(--band${ph})"></span>${PH[ph]}（${R[ph]}）</span><span><span class="chip" style="background:#D2463A;border-radius:50%"></span>${PH[ph]}失誤</span></div></div>
     <div><h3 style="margin-bottom:6px">${PH[ph]}中勝率下跌 ${CFG.th1}% 以上的著手（${mis.length} 手）</h3><div class="list mist" id="vwMist"></div></div>
   </div></div></div></section>`;
+  bindPh();
   el.querySelectorAll("[data-game]").forEach(b=>b.onclick=()=>openGame(+b.dataset.game,ph));
   el.querySelectorAll("[data-tg]").forEach(c=>c.onclick=()=>openGame(+c.dataset.tg,ph));
   const mistEl=document.getElementById("vwMist");
@@ -6551,6 +6559,8 @@ function dtTabs(){
     ["load","載入棋譜",null],
     ["log","更新紀錄",null],
     ["set","設定",null]];
+  /* 「更新紀錄」「設定」只給管理者（選手不需要，改了設定數字會和排行榜對不上） */
+  if(!ROLE.admin)for(let i=tb.length-1;i>=0;i--)if(tb[i][0]==="log"||tb[i][0]==="set")tb.splice(i,1);
   if(!S.dtTab&&!INDEX&&DSERR)S.dtTab="load";
   if(!tb.some(t=>t[0]===S.dtTab))S.dtTab="search";
   return tb;
@@ -6566,7 +6576,7 @@ function dtGames(){
   const top=INDEX?INDEX.players.filter(p=>p[3]!=="PR").slice(0,24):[];
   const L=gs(),flt=L.length!==GAMES.length,all=S.dtAll?L:L.slice(0,50);
   const tabL=(k,t)=>`<button class="link" data-dtt="${k}">${t}</button>`;
-  return `${GAMES.length?`<section class="panel"><div class="panel-h"><h2>${who()}的對局</h2><p>${flt?`篩選後 ${L.length} 局／全部 ${GAMES.length} 局 <button class="link" id="dtNoFlt">清除篩選</button>`:`${GAMES.length} 局`}${S.privOn?"（我的棋譜庫）":""} · 點日期或一列開啟中盤研究</p></div>
+  return `${GAMES.length?`<section class="panel"><div class="panel-h"><h2>${who()}的對局</h2><p>${flt?`篩選後 ${L.length} 局／全部 ${GAMES.length} 局 <button class="link" id="dtNoFlt">清除篩選</button>`:`${GAMES.length} 局`}${S.privOn?"（我的棋譜庫）":""} · 點日期或一列開啟對局檢討</p></div>
     <div class="tblwrap"><table class="gt dgt"><thead><tr><th>日期</th><th>執子</th><th>對手</th><th>結果</th><th>手數</th><th title="同一局面裡和 AI 最佳手相比，每手平均損失的勝率">每手勝率損失</th><th title="下在 AI 前三選以內的比例">前三選</th>${CFG.mt.slice(0,3).map(t=>`<th title="勝率下跌 ${t}% 以上的著手數">−${t}% 以上</th>`).join("")}<th>賽事</th></tr></thead><tbody>
     ${all.map(g=>`<tr data-grow="${g.id}" style="cursor:pointer"><td class="num"><button class="link" data-grow="${g.id}">${fmtD(g.date)}</button></td><td data-l="執子">${stoneI(g.c)}</td><td data-l="對手">${esc(g.opp)}</td><td class="${g.win===true?"res-w":g.win===false?"res-l":""}">${esc(g.res)}</td><td class="num" data-l="手數">${g.len}</td>
       <td class="num" data-l="每手損失">${g.lossAll==null?"—":fx(g.lossAll,2)+"%"}</td><td class="num" data-l="前三選">${g.sr3All==null?"—":Math.round(g.sr3All)+"%"}</td>${[0,1,2].map(i=>`<td class="num" data-l="−${CFG.mt[i]}%">${!g.hasWR?"—":g.mtC[i]?g.mtC[i].reduce((a,b)=>a+b,0):0}</td>`).join("")}<td class="sub dge">${esc(g.evt)}</td></tr>`).join("")}
@@ -6725,8 +6735,7 @@ function renderAD(){
   const adTab=()=>el.querySelectorAll("[data-adtab]").forEach(b=>b.onclick=()=>{S.dtTab=b.dataset.adtab;go("dt")});
   if(!ROLE.admin){el.innerHTML=`<section class="panel adhead"><div class="panel-h"><h2>管理 <span class="tag warn">只有管理者能使用</span></h2></div>${ROLE.ready?`
     <p class="sub adlead">這一頁是管理者用的：上傳正式棋譜到共用資料庫、刪除或復原棋譜、重新計算排名。只有管理者帳號能使用。</p>
-    <p class="adlead">自己或學生的棋譜：請到<button class="link" data-adtab="load">「棋譜庫 → 載入棋譜」</button>，可以暫時分析，或存到只有你看得到的「我的棋譜庫」。</p>
-    <p class="sub adlead">資料庫什麼時候加了哪些棋譜，請看<button class="link" data-adtab="log">「棋譜庫 → 更新紀錄」</button>。</p>`:`<p class="sub adlead">確認權限中…</p>`}</section>`;adTab();return}
+    <p class="adlead">自己或學生的棋譜：請到<button class="link" data-adtab="load">「棋譜庫 → 載入棋譜」</button>，可以暫時分析，或存到只有你看得到的「我的棋譜庫」。</p>`:`<p class="sub adlead">確認權限中…</p>`}</section>`;adTab();return}
   if(!INDEX){el.innerHTML=`<section class="panel"><div class="panel-h"><h2>管理</h2></div>${DSERR&&!FS.empty?`<div class="note">${esc(DSERR)}</div>`:DSERR?`<p class="sub">資料庫還是空的：請用下面的「匯入資料」把備份的資料檔放進來。</p>`:`<p class="sub">載入中…</p>`}</section>`+(DSERR?fsImportPanel(true):"");fsBindImport(el);return}
   if(!CAT&&!CATERR&&!S.catLoading){S.catLoading=true;loadCat().then(()=>{S.catLoading=false;if(S.page==="ad"||S.page==="dt")renderDT()})}
   const ids=(UPL?UPL.b:[]).map(b=>b.by).filter(Boolean);
@@ -6913,7 +6922,7 @@ function cpH2H(A,B){
       <span class="ell">${stoneI(g.c)} <span class="sub">${esc(g.evt)||"棋戰不明"}</span></span>
       <span class="sub num">前三選 ${g.sr3All==null?"—":g.sr3All.toFixed(0)+"%"}</span>
       <span class="${g.win===true?"res-w":g.win===false?"res-l":"sub"}">${esc(g.res)}</span></button>`).join("")}</div>
-    <p class="cpnote">「前三選」是該局中 ${esc(A.name)} 的著手落在 AI 前三選的比例。點一列可以打開那局的中盤研究。</p></section>`;
+    <p class="cpnote">「前三選」是該局中 ${esc(A.name)} 的著手落在 AI 前三選的比例。點一列可以打開那局的對局檢討。</p></section>`;
 }
 const CPLAB={s3f:"布局",s3m:"中盤",s3e:"官子"};
 function cpVerdict(A,B){
@@ -7121,13 +7130,13 @@ function cpAgree(A,B){
     const f=x=>x?`<b>${Math.round(x.p)}%</b><em>${x.w} 勝 ${x.n-x.w} 敗</em>`:"<b>—</b>";
     const win=a&&b&&Math.abs(a.p-b.p)>=3?(a.p>b.p?0:1):-1;
     return `<div class="cprow"><div class="cpv a${win===0?" win":""}">${f(a)}</div><div class="cpb l"><i class="a${win===0?" win":""}" style="width:${(a?a.p:0).toFixed(1)}%"></i></div><div class="cpl">${lab}</div><div class="cpb r"><i class="b${win===1?" win":""}" style="width:${(b?b.p:0).toFixed(1)}%"></i></div><div class="cpv b${win===1?" win":""}">${f(b)}</div></div>`};
-  return `<section class="panel"><div class="panel-h"><h2>AI 吻合度與勝率</h2>
+  return `<details class="panel"><summary style="cursor:pointer;color:var(--accent);font-weight:600">進階：AI 吻合度與勝率（未考慮對手強弱）</summary><div class="panel-h" style="margin-top:12px"><h2>AI 吻合度與勝率</h2>
     <p>大家常看的數字（沒有考慮對手強弱）· 數字下面的「對手」＝同一批對局中對手的吻合度：吻合度會隨棋局難易上下，和對手比較才公平 · 名次是和${esc(regLabel())}比</p></div>
     ${h3("AI 吻合度：下出 AI 最佳手的比例",1)}${PH4.map(([a,,l])=>ar(a,l)).join("")}
     ${h3("AI 吻合度：下在 AI 前三選以內的比例")}${PH4.map(([,b,l])=>ar(b,l)).join("")}
     ${h3(`每手勝率損失：勝率 ${BAND().short} 時，每下一手平均掉多少勝率（越小越好）`)}${["f","m","e","a"].map((suf,i)=>cpRow(bandKey(BAND(),suf),A,B,["布局","中盤","官子","全局"][i])).join("")}
     ${h3("勝率（勝敗）")}${winRow("全部",null)}${winRow("執黑","B")}${winRow("執白","W")}
-  </section>`;
+  </details>`;
 }
 let CP_TOK=0;
 async function renderCP(){
@@ -7193,6 +7202,7 @@ function navIntoView(){const n=document.getElementById("nav"),b=n&&n.querySelect
 /* 能力圖的刻度（實力值／名次）與誤差範圍：總覽、棋士對比共用 */
 /* 重畫後把刻度切換列留在原來的位置（切換在卡片下方，卡片高度變了也不會跳） */
 const rdRerender=()=>{
+  S.rdOpen=true;   /* 總覽的「圖的設定」重畫後保持打開 */
   const q=()=>document.querySelector(`#page-${S.page} .rdctl`),c=q(),t0=c?c.getBoundingClientRect().top:null;
   const r=S.page==="cp"?renderCP():S.page==="ov"?renderOV():null;
   Promise.resolve(r).then(()=>{const c2=q();if(t0!=null&&c2)window.scrollBy(0,c2.getBoundingClientRect().top-t0)});
@@ -7207,10 +7217,11 @@ function busy(msg){
   if(e)e.innerHTML=`<section class="panel"><p class="sub">${esc(msg)}</p></section>`;
 }
 function go(p){
+  if(p==="ed"){S.rvPh=2;p="md"}   /* 舊的官子研究頁 */
   S.page=p;
   document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("on",b.dataset.p===p));
   PAGES.forEach(k=>{const e=document.getElementById("page-"+k);e.hidden=k!==p;if(k!==p)e.innerHTML=""});
-  ({ov:renderOV,fu:renderFU,se:renderSE,md:()=>renderPH(1),ed:()=>renderPH(2),rk:renderRK,cp:renderCP,dt:renderDT,ad:renderAD})[p]();
+  ({ov:renderOV,fu:renderFU,se:renderSE,md:()=>renderPH(S.rvPh==null?1:S.rvPh),rk:renderRK,cp:renderCP,dt:renderDT,ad:renderAD})[p]();
   renderFoot();navIntoView();updFltSum();
   window.scrollTo({top:0});
 }
@@ -7252,7 +7263,7 @@ async function pickPlayer(name,o){
 }
 document.querySelectorAll("#nav button").forEach(b=>b.onclick=()=>{
   const p=b.dataset.p;
-  if((p==="md"||p==="ed")&&S.page!==p){const ph=p==="md"?1:2;const L=gs();if(L.length){if(!L.find(g=>g.id===S.game))S.game=L[0].id;const g=GAMES.find(x=>x.id===S.game);if(g)S.move=firstMove(g,ph)}}
+  if(p==="md"&&S.page!==p){const ph=S.rvPh==null?1:S.rvPh;const L=gs();if(L.length){if(!L.find(g=>g.id===S.game))S.game=L[0].id;const g=GAMES.find(x=>x.id===S.game);if(g)S.move=firstMove(g,ph)}}
   go(p);
 });
 document.getElementById("colorSeg").querySelectorAll("button").forEach(b=>b.onclick=()=>{S.col=b.dataset.c;resetLists();saveLS();syncHeader();go(S.page)});
@@ -7284,7 +7295,7 @@ document.addEventListener("click",e=>{
   const b=e.target.closest("[data-ins]");if(!b)return;
   const[k,v]=b.dataset.ins.split(":");
   if(k==="ph")goPhase(+v);else if(k==="rk")go("rk");
-  else if(k==="rc"){const o=OPEN[+v];S.fuTab="recent";S.rcF=o?opId(o):null;S.fuSel=null;S.fuStep=null;S.fuMore=3;go("fu")}
+  else if(k==="rc"){S.fuTab="op";go("fu")}
   else{S.fuTab=v;S.fuSel=null;S.trPath=[];S.rcF=null;go("fu")}
 });
 /* 拖放區以外に落とした：管理頁（管理者）なら上傳清單へ。ほかは「載入棋譜」を開いて、暫時分析か我的棋譜庫かを選んでもらう */
@@ -7336,7 +7347,7 @@ function syncHeader(){
   document.getElementById("filters").hidden=!has;
   const tag=document.getElementById("modeTag");
   tag.hidden=!has;
-  tag.innerHTML=MODE==="data"?`內建資料庫 ${INDEX?INDEX.n.toLocaleString():""} 局${UPL?`<span class="sub">・</span><button class="uplast" data-goto-dt title="最後一次加入棋譜（上傳或復原）的日期；點一下看更新紀錄（刪除也記在那裡）">${lastUp()?`最後上傳 ${esc(fmtAt(lastUp().at).slice(0,10))}`:`資料更新 ${esc(fmtAt(UPL.last).slice(0,10))}`}</button>`:""}${S.subject?"　"+regTag(S.subject):""}`:MODE==="sgf"?(S.privOn?`我的棋譜庫 ${RAW.length} 局（只有你看得到）<button class="uplast" id="privExitH">← 回到內建資料庫</button>`:`自行載入 ${RAW.length} 局`):"";
+  tag.innerHTML=MODE==="data"?`內建資料庫 ${INDEX?INDEX.n.toLocaleString():""} 局${UPL?`<span class="sub">・</span>${ROLE.admin?`<button class="uplast" data-goto-dt title="最後一次加入棋譜（上傳或復原）的日期；點一下看更新紀錄（刪除也記在那裡）">`:`<span class="sub" title="最後一次加入棋譜的日期">`}${lastUp()?`最後上傳 ${esc(fmtAt(lastUp().at).slice(0,10))}`:`資料更新 ${esc(fmtAt(UPL.last).slice(0,10))}`}${ROLE.admin?`</button>`:`</span>`}`:""}${S.subject?"　"+regTag(S.subject):""}`:MODE==="sgf"?(S.privOn?`我的棋譜庫 ${RAW.length} 局（只有你看得到）<button class="uplast" id="privExitH">← 回到內建資料庫</button>`:`自行載入 ${RAW.length} 局`):"";
   tag.className="tag"+(MODE==="sgf"?" warn":"");
   const px=tag.querySelector("#privExitH");if(px)px.onclick=()=>privExit();
   const ul=tag.querySelector(".uplast:not(#privExitH)");if(ul)ul.onclick=()=>{if(ROLE.admin)go("ad");else{S.dtTab="log";go("dt")}setTimeout(()=>revealEl("upLog"),80)};
