@@ -545,6 +545,8 @@ details.more summary{cursor:pointer;color:var(--accent);font-size:12px;margin-bo
 .sugbox button:hover,.sugbox button.on{background:var(--surface2)}
 .sugbox .sub{font-size:12px;color:var(--muted);font-family:var(--mono);white-space:nowrap}
 .wsub{width:100%;max-width:430px;margin-inline:auto;text-align:center;font-size:12px;color:var(--muted)}
+.wsub3{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:baseline}
+.wcap{white-space:nowrap;font-size:13px;font-weight:600;color:var(--ink)}
 .clegend{display:flex;gap:5px 14px;flex-wrap:wrap;justify-content:center;font-size:12px;color:var(--muted);margin-top:2px}
 .clegend span{display:inline-flex;align-items:center;gap:5px}
 .clegend i{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}
@@ -1826,8 +1828,8 @@ function gameHeader(g){
 }
 /* 參考圖那樣的勝率條：左黑右白，中間是手數 */
 function wrBar(g,n){
-  if(!g||!g.hasWR)return "";
-  const bw=j=>g.c==="B"?g.wr[j]:100-g.wr[j];
+  if(!g||!g.hasWR)return "";   /* 沒有勝率的棋譜：提子數改寫在棋盤下方那一行（capHTML） */
+  const bw=j=>g.c==="B"?g.wr[j]:100-g.wr[j],cap=boardAt(g,n).cap;
   const b=Math.max(0,Math.min(100,bw(n))),w=100-b;
   const scAt=j=>(j>=0&&j<g.len&&g.moves[j].score!=null)?g.moves[j].score:null;
   const sc=scAt(n>=g.len?g.len-1:n);
@@ -1848,7 +1850,7 @@ function wrBar(g,n){
       <u>${n}</u></div>
     <div class="wn">${esc(g.raw.pw)}<span class="stone w"></span></div>
   </div>
-  <div class="wsub">盤面 ${sc==null?"—":(sc>=0?`黑 +${sc}`:`白 +${-sc}`)+" 目"}${last}</div>`;
+  <div class="wsub wsub3"><span class="wcap" title="黑方提掉的白子數">提子：<span class="num">${cap.B}</span></span><span>盤面 ${sc==null?"—":(sc>=0?`黑 +${sc}`:`白 +${-sc}`)+" 目"}${last}</span><span class="wcap" title="白方提掉的黑子數">提子：<span class="num">${cap.W}</span></span></div>`;
 }
 function phaseStats(list){
   return [0,1,2].map(p=>{
@@ -2470,7 +2472,7 @@ function vwBind(pre,g,st,o={}){
     q("Step").value=n;
     q("Out").textContent=`第 ${n} / ${max} 手`;
     const m=(g.mist||[]).find(x=>x.k+1===n);
-    q("Cap").innerHTML=`${PH[n?phaseOf(n):0]} · ${capHTML(g,n)}${g.hasWR?` · 勝率 <span class="num">${g.wr[n].toFixed(1)}%</span>`:""}${m?` · <span style="color:var(--bad)">失著 −${m.drop}%</span>`:""}`;
+    q("Cap").innerHTML=`${PH[n?phaseOf(n):0]}${g.hasWR?"":" · "+capHTML(g,n)}${g.hasWR?` · 勝率 <span class="num">${g.wr[n].toFixed(1)}%</span>`:""}${m?` · <span style="color:var(--bad)">失著 −${m.drop}%</span>`:""}`;
   };
   const set=v=>{S[st]=Math.max(0,Math.min(max,v));draw()};
   q("Num").onchange=e=>{S.numMode=e.target.value;saveLS();draw()};
@@ -4586,7 +4588,7 @@ function drawVW(ph){
   document.getElementById("vwStep").value=n;
   document.getElementById("vwLeg").innerHTML=candLegend(cands.length>0);
   const sc=cur&&cur.score!=null?` · 目數差 ${(g.c==="B"?cur.score:-cur.score)>=0?"+":""}${(g.c==="B"?cur.score:-cur.score)}`:"";
-  document.getElementById("vwOut").innerHTML=`第 ${n} / ${g.len} 手 · ${PH[n?phaseOf(n):0]} · ${capHTML(g,n)}${g.hasWR?` · 勝率 ${g.wr[n].toFixed(1)}%`:""}${sc}`;
+  document.getElementById("vwOut").innerHTML=`第 ${n} / ${g.len} 手 · ${PH[n?phaseOf(n):0]}${g.hasWR?"":" · "+capHTML(g,n)}${g.hasWR?` · 勝率 ${g.wr[n].toFixed(1)}%`:""}${sc}`;
   const c=document.getElementById("vwCall");
   const rk=cur==null?"":cur.srank===1?"AI 的最佳手":cur.srank>=2?`AI 讀完後排第 ${cur.srank}`:cur.srank===0?"不在 AI 的前 5 手內":"";
   if(m){
