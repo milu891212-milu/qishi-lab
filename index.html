@@ -990,7 +990,7 @@ html.a4on body{overflow:hidden}
    設定與狀態
    ============================================================ */
 const KBAND=40;   /* 關鍵場面＝勝率 50±40%＝10–90% */
-const CFG={pov:"auto",th1:3,th2:8,thF1:8,thF2:15,p1:50,p2:150,depth:4,omode:"self",oself:2,band:"b3",mt:[5,10,20,30,50]};
+const CFG={pov:"auto",th1:3,th2:8,thF1:8,thF2:15,thM1:15,thM2:30,thE1:2,thE2:5,p1:50,p2:150,depth:4,omode:"self",oself:2,band:"b3",mt:[5,10,20,30,50]};
 const MTH=[3,5,8,10,15,20,30,50];   /* 排行榜有名次的只有這些門檻 */
 const S={page:"ov",subject:"",col:"all",per:"n0",from:"",to:"",fuTab:"op",fuSel:null,fuStep:null,game:null,move:0,ovMore:3,fuMore:3,
   numMode:"n5",showRec:true,
@@ -1025,8 +1025,13 @@ const saveLS=()=>{try{localStorage.setItem(LSK+"-cfg",JSON.stringify({...CFG,col
    共用
    ============================================================ */
 const PH=["布局","中盤","官子"];
-/* 對局檢討標記失誤的門檻：布局比較寬（thF1／thF2，預設掉 8% 算失誤、15% 算大失誤），中盤、官子用 th1／th2（3%／8%） */
-const TH1=ph=>ph===0?CFG.thF1:CFG.th1,TH2=ph=>ph===0?CFG.thF2:CFG.th2;
+/* 對局檢討標記失誤的門檻（失誤／大失誤）：布局 thF1／thF2（勝率掉 8%／15%）、中盤 thM1／thM2（15%／30%）、
+   官子看目數 thE1／thE2（損失 2 目／5 目；棋譜沒有目數時退回勝率 th1／th2＝3%／8%）。
+   每一個失誤記著單位 u（"%"＝勝率、"目"＝目數） */
+const TH1=ph=>[CFG.thF1,CFG.thM1,CFG.thE1][ph],TH2=ph=>[CFG.thF2,CFG.thM2,CFG.thE2][ph];
+const THU=ph=>ph===2?" 目":"%",MU=m=>m.u==="目"?" 目":"%",thL=ph=>ph===2?`${CFG.thE1} 目以上`:`${TH1(ph)}% 以上`;
+const BIG=m=>m.u==="目"?CFG.thE2:m.ph===2?CFG.th2:TH2(m.ph);   /* 這個失誤算不算大失誤 */
+const thTxt=ph=>ph===2?`目數 −${CFG.thE1} 目以上 ／ −${CFG.thE2} 目以上`:`勝率 −${TH1(ph)}% 以上 ／ −${TH2(ph)}% 以上`;
 /* 「大失著」用的門檻：設定裡的 10%（沒有 10% 時用第二個門檻） */
 const K10=()=>CFG.mt.indexOf(10)>=0?CFG.mt.indexOf(10):Math.min(1,CFG.mt.length-1);
 const phaseOf=n=>n<=CFG.p1?0:n<=CFG.p2?1:2;
@@ -1437,7 +1442,13 @@ function toGame(raw,id,subj){
     if(d!=null)BANDS.forEach(b=>{if(inBand(pre,b)){bS[b.id][p]+=d;bC[b.id][p]++}});
     if(m.rank!=null){agree[p][1]++;agree3[p][1]++;if(m.rank===1)agree[p][0]++;if(m.rank<=3)agree3[p][0]++}
     if(m.srank!=null){srch[p][2]++;if(m.srank===1)srch[p][0]++;if(m.srank>=1&&m.srank<=3)srch[p][1]++}
-    if(any&&drop>=TH1(p))mist.push({k,ph:p,drop:Math.round(drop*10)/10,vs:lv==null?null:Math.round(lv*10)/10,rec:m.best,rank:m.rank});
+    if(any){
+      /* 官子看目數：這手之前與之後的黑目數差（下的一方的角度）。沒有目數時退回勝率 */
+      let dv=drop,u="%",th=TH1(p);
+      if(p===2){const s0=m.score,s1=k+1<N?raw.moves[k+1].score:null;
+        if(s0!=null&&s1!=null){dv=Math.max(0,sc==="B"?s0-s1:s1-s0);u="目";th=CFG.thE1;if(m.best&&m.best===m.p)dv=0}else th=CFG.th1}   /* 實戰手就是 AI 最佳手：目數的晃動，不算失誤 */
+      if(dv>=th)mist.push({k,ph:p,u,drop:Math.round(dv*10)/10,vs:lv==null?null:Math.round(lv*10)/10,rec:m.best,rank:m.rank});
+    }
     if(d==null||!inBand(pre,AB))continue;
     loss[p][0]+=d;loss[p][1]++;
   }
@@ -1860,7 +1871,7 @@ function phaseStats(list){
   return [0,1,2].map(p=>{
     const n=list.length||1;
     const m=list.reduce((a,g)=>a+g.mist.filter(x=>x.ph===p).length,0);
-    const big=list.reduce((a,g)=>a+g.mist.filter(x=>x.ph===p&&x.drop>=TH2(p)).length,0);
+    const big=list.reduce((a,g)=>a+g.mist.filter(x=>x.ph===p&&x.drop>=BIG(x)).length,0);
     let ls=0,lc=0,as=0,a3=0,ac=0,nn=0,s1=0,s3=0,sn=0,kn=0;
     const mc=CFG.mt.map(()=>0),kc=CFG.mt.map(()=>0);
     list.forEach(g=>{ls+=g.lSum[p];lc+=g.lCnt[p];as+=g.aSum[p];a3+=g.a3Sum[p];ac+=g.aCnt[p];nn+=g.nC[p];
@@ -2478,7 +2489,7 @@ function vwBind(pre,g,st,o={}){
     q("Step").value=n;
     q("Out").textContent=`第 ${n} / ${max} 手`;
     const m=(g.mist||[]).find(x=>x.k+1===n);
-    q("Cap").innerHTML=`${PH[n?phaseOf(n):0]}${g.hasWR?"":" · "+capHTML(g,n)}${g.hasWR?` · 勝率 <span class="num">${g.wr[n].toFixed(1)}%</span>`:""}${m?` · <span style="color:var(--bad)">失著 −${m.drop}%</span>`:""}`;
+    q("Cap").innerHTML=`${PH[n?phaseOf(n):0]}${g.hasWR?"":" · "+capHTML(g,n)}${g.hasWR?` · 勝率 <span class="num">${g.wr[n].toFixed(1)}%</span>`:""}${m?` · <span style="color:var(--bad)">失著 −${m.drop}${MU(m)}</span>`:""}`;
   };
   const set=v=>{S[st]=Math.max(0,Math.min(max,v));draw()};
   q("Num").onchange=e=>{S.numMode=e.target.value;saveLS();draw()};
@@ -4545,13 +4556,13 @@ function renderPH(ph){
   const worstG=[...L].sort((a,b)=>(b.loss[ph]||0)-(a.loss[ph]||0))[0];
   const R=PHR();
   const lst=L.map(x=>{const cnt=x.mist.filter(m=>m.ph===ph).length;
-    return `<button class="row ${x.id===g.id?"on":""}" data-game="${x.id}" style="grid-template-columns:minmax(0,1fr) auto"><span style="display:flex;gap:6px;align-items:center;min-width:0">${stoneI(x.c)}<span class="ell"><span class="num sub">${fmtS(x.date)}</span><br>vs ${esc(x.opp)}<br><span class="sub">−${TH1(ph)}% 以上 ${cnt} 手 · 損失 ${x.loss[ph]==null?"—":fx(x.loss[ph],2)+"%／手"}</span></span></span><span class="${x.win===true?"res-w":x.win===false?"res-l":"sub"}" style="font-size:12px">${esc(x.res)}</span></button>`}).join("");
+    return `<button class="row ${x.id===g.id?"on":""}" data-game="${x.id}" style="grid-template-columns:minmax(0,1fr) auto"><span style="display:flex;gap:6px;align-items:center;min-width:0">${stoneI(x.c)}<span class="ell"><span class="num sub">${fmtS(x.date)}</span><br>vs ${esc(x.opp)}<br><span class="sub">−${thL(ph)} ${cnt} 手 · 損失 ${x.loss[ph]==null?"—":fx(x.loss[ph],2)+"%／手"}</span></span></span><span class="${x.win===true?"res-w":x.win===false?"res-l":"sub"}" style="font-size:12px">${esc(x.res)}</span></button>`}).join("");
   const mis=g.mist.filter(m=>m.ph===ph);
   const PQ=phaseQ(L),pid=PQID[ph],k10=K10(),rq=phaseRank(ps,L,ph);
   el.innerHTML=phSel+`<section class="kpis">
     <div class="kpi"><div class="l">${PH[ph]}比平均棋士</div><div class="v num">${PQ&&PQ[pid]!=null?qfMain(pid,PQ[pid],PQ)+(ph<2?"／局":"／手"):"—"}</div><div class="s">${PQ&&PQ[pid]!=null?(rq?`評價 ${TLAB[TIER(rq.pct)]} · `:"")+"已考慮對手強弱":"考慮對手強弱的數字算不出來"}</div></div>
     <div class="kpi"><div class="l">${PH[ph]}大失著（勝率掉 ${CFG.mt[k10]}% 以上）</div><div class="v num">${p.mpg[k10]==null?"—":p.mpg[k10].toFixed(2)}<span style="font-size:15px"> 次/局</span></div><div class="s">${others.map(o=>`${PH[o.p]} ${o.mpg[k10]==null?"—":o.mpg[k10].toFixed(2)}`).join(" · ")}</div></div>
-    <div class="kpi"><div class="l">每局標記的失誤</div><div class="v num">${p.m.toFixed(1)} <span style="font-size:15px;color:var(--muted)">/ ${p.big.toFixed(1)}</span></div><div class="s">勝率 −${TH1(ph)}% 以上 ／ −${TH2(ph)}% 以上</div></div>
+    <div class="kpi"><div class="l">每局標記的失誤</div><div class="v num">${p.m.toFixed(1)} <span style="font-size:15px;color:var(--muted)">/ ${p.big.toFixed(1)}</span></div><div class="s">${thTxt(ph)}</div></div>
     <div class="kpi"><div class="l">${PH[ph]}最差的一局</div><div class="v num" style="font-size:20px">${fmtS(worstG.date)}</div><div class="s">vs ${esc(worstG.opp)} · ${fx(worstG.loss[ph],2)}%／手</div></div>
   </section>
   <section class="panel"><div class="panel-h"><h2>${PH[ph]} AI 吻合度（最佳手）走勢</h2><p>${R[ph]} · 舊 → 新 · 越高越好 · 點擊圓點開啟該局</p></div>${trendSVG(L,ph,true)}
@@ -4566,13 +4577,13 @@ function renderPH(ph){
   <div class="grid" style="gap:12px"><div id="vwCall" class="callout"></div>
     <div><h3 style="margin-bottom:6px">勝率變化（${who()}視角）</h3><div id="vwGraph"></div>
     <div class="legend"><span><span class="chip" style="background:var(--band${ph})"></span>${PH[ph]}（${R[ph]}）</span><span><span class="chip" style="background:#D2463A;border-radius:50%"></span>${PH[ph]}失誤</span></div></div>
-    <div><h3 style="margin-bottom:6px">${PH[ph]}中勝率下跌 ${TH1(ph)}% 以上的著手（${mis.length} 手）</h3><div class="list mist" id="vwMist"></div></div>
+    <div><h3 style="margin-bottom:6px">${PH[ph]}中${ph===2?"目數損失":"勝率下跌"} ${thL(ph)}的著手（${mis.length} 手）</h3><div class="list mist" id="vwMist"></div></div>
   </div></div></div></section>`;
   bindPh();
   el.querySelectorAll("[data-game]").forEach(b=>b.onclick=()=>openGame(+b.dataset.game,ph));
   el.querySelectorAll("[data-tg]").forEach(c=>c.onclick=()=>openGame(+c.dataset.tg,ph));
   const mistEl=document.getElementById("vwMist");
-  mistEl.innerHTML=mis.length?mis.map(m=>`<button class="row" data-mv="${m.k+1}"><span class="num">第 ${m.k+1} 手</span><span class="sub num">${coordName(g.moves[m.k].p,g.sz)}</span><span class="num" style="color:var(--bad)">−${m.drop}%${m.drop>=TH2(m.ph)?" · 大失誤":""}${m.rec&&S.showRec?` <span class="sub" style="color:var(--muted)">→ ${coordName(m.rec,g.sz)}</span>`:""}</span></button>`).join(""):`<p class="sub">${g.hasWR?"這局的"+PH[ph]+"沒有符合的著手。":"這局沒有勝率資料。"}</p>`;
+  mistEl.innerHTML=mis.length?mis.map(m=>`<button class="row" data-mv="${m.k+1}"><span class="num">第 ${m.k+1} 手</span><span class="sub num">${coordName(g.moves[m.k].p,g.sz)}</span><span class="num" style="color:var(--bad)">−${m.drop}${MU(m)}${m.drop>=BIG(m)?" · 大失誤":""}${m.rec&&S.showRec?` <span class="sub" style="color:var(--muted)">→ ${coordName(m.rec,g.sz)}</span>`:""}</span></button>`).join(""):`<p class="sub">${g.hasWR?"這局的"+PH[ph]+"沒有符合的著手。":"這局沒有勝率資料。"}</p>`;
   mistEl.querySelectorAll("[data-mv]").forEach(b=>b.onclick=()=>{S.move=+b.dataset.mv;drawVW(ph)});
   document.getElementById("vwNum").onchange=e=>{S.numMode=e.target.value;saveLS();drawVW(ph)};
   document.getElementById("vwRec").onchange=e=>{S.showRec=e.target.checked;saveLS();drawVW(ph)};
@@ -4603,7 +4614,7 @@ function drawVW(ph){
   const rk=cur==null?"":cur.srank===1?"AI 的最佳手":cur.srank>=2?`AI 讀完後排第 ${cur.srank}`:cur.srank===0?"不在 AI 的前 5 手內":"";
   if(m){
     c.className="callout bad";
-    c.innerHTML=`第 ${n} 手 ${coordName(cur.p,g.sz)}：勝率 −${m.drop}%${m.drop>=TH2(m.ph)?"（大失誤）":""}${m.vs!=null?`（與 AI 最佳手相比 −${m.vs}%）`:""}${rk?` · ${rk}`:""}。${recTxt}`;
+    c.innerHTML=`第 ${n} 手 ${coordName(cur.p,g.sz)}：${m.u==="目"?"目數":"勝率"} −${m.drop}${MU(m)}${m.drop>=BIG(m)?"（大失誤）":""}${m.vs!=null&&m.u!=="目"?`（與 AI 最佳手相比 −${m.vs}%）`:""}${rk?` · ${rk}`:""}。${recTxt}`;
   }else if(!n){c.className="callout";c.innerHTML=`對局開始。${recTxt}`}
   else if(cur.c!==g.c){c.className="callout";c.innerHTML=`第 ${n} 手 ${coordName(cur.p,g.sz)}（對手）。${recTxt}`}
   else{
@@ -4626,7 +4637,7 @@ function wrSVG(g,n,ph){
   [CFG.p1,CFG.p2].forEach(k=>{if(k<g.len)h+=`<text x="${X(k)}" y="${H-5}" text-anchor="middle" font-size="10" fill="var(--faint)" font-family="IBM Plex Mono,monospace">${k}</text>`});
   if(g.hasWR){
     h+=`<polyline points="${g.wr.map((v,k)=>X(k)+","+Y(v)).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="1.5"/>`;
-    g.mist.forEach(m=>h+=`<circle cx="${X(m.k+1)}" cy="${Y(g.wr[m.k+1])}" r="${m.drop>=TH2(m.ph)?4.5:3.2}" fill="${m.ph===ph?"#D2463A":"var(--faint)"}" opacity="${m.ph===ph?1:.5}"><title>第 ${m.k+1} 手 −${m.drop}%</title></circle>`);
+    g.mist.forEach(m=>h+=`<circle cx="${X(m.k+1)}" cy="${Y(g.wr[m.k+1])}" r="${m.drop>=BIG(m)?4.5:3.2}" fill="${m.ph===ph?"#D2463A":"var(--faint)"}" opacity="${m.ph===ph?1:.5}"><title>第 ${m.k+1} 手 −${m.drop}${MU(m)}</title></circle>`);
   }else h+=`<text x="${W/2}" y="${H/2}" text-anchor="middle" font-size="12" fill="var(--faint)">沒有勝率資料</text>`;
   h+=`<line x1="${X(n)}" x2="${X(n)}" y1="${pt}" y2="${H-pb}" stroke="var(--ink)" stroke-width="1"/>`;
   return h+"</svg>";
@@ -6658,10 +6669,14 @@ function dtSet(){
   return `<section class="panel"><div class="panel-h"><h2>分析設定</h2><p>改動後立即重新計算</p></div>
   <div class="sets">
     ${CFG.mt.map((t,i)=>`<label>視為失著的勝率下跌幅度 ${"①②③④⑤"[i]}（%）<input type="number" id="setM${i}" min="1" max="99" step="1" value="${t}"></label>`).join("")}
-    <label>棋譜檢討標記的下跌幅度（%）<input type="number" id="setTh1" min="0.5" max="50" step="0.5" value="${CFG.th1}"></label>
-    <label>同上，視為大失著的幅度（%）<input type="number" id="setTh2" min="1" max="80" step="0.5" value="${CFG.th2}"></label>
-    <label>布局的檢討標記幅度（%）<input type="number" id="setThF1" min="0.5" max="50" step="0.5" value="${CFG.thF1}"></label>
-    <label>布局視為大失著的幅度（%）<input type="number" id="setThF2" min="1" max="80" step="0.5" value="${CFG.thF2}"></label>
+    <label>布局：勝率掉幾 % 算失誤<input type="number" id="setThF1" min="0.5" max="50" step="0.5" value="${CFG.thF1}"></label>
+    <label>布局：掉幾 % 算大失誤<input type="number" id="setThF2" min="1" max="80" step="0.5" value="${CFG.thF2}"></label>
+    <label>中盤：勝率掉幾 % 算失誤<input type="number" id="setThM1" min="0.5" max="50" step="0.5" value="${CFG.thM1}"></label>
+    <label>中盤：掉幾 % 算大失誤<input type="number" id="setThM2" min="1" max="80" step="0.5" value="${CFG.thM2}"></label>
+    <label>官子：損失幾目算失誤<input type="number" id="setThE1" min="0.5" max="30" step="0.5" value="${CFG.thE1}"></label>
+    <label>官子：損失幾目算大失誤<input type="number" id="setThE2" min="1" max="30" step="0.5" value="${CFG.thE2}"></label>
+    <label>官子（棋譜沒有目數時）：勝率掉幾 %<input type="number" id="setTh1" min="0.5" max="50" step="0.5" value="${CFG.th1}"></label>
+    <label>同上，掉幾 % 算大失誤<input type="number" id="setTh2" min="1" max="80" step="0.5" value="${CFG.th2}"></label>
     <label>布局到第幾手<input type="number" id="setP1" min="10" max="120" step="1" value="${CFG.p1}"></label>
     <label>中盤到第幾手<input type="number" id="setP2" min="40" max="300" step="1" value="${CFG.p2}"></label>
     <label>勝率損失的形勢帶<select id="setBand">${BANDS.map(b=>`<option value="${b.id}">${b.lab}${b.rank?"":"（順位對象外）"}</option>`).join("")}</select></label>
@@ -6722,7 +6737,7 @@ function renderDT(){
   const sb=document.getElementById("setBand");sb.value=CFG.band;
   sb.onchange=e=>{CFG.band=e.target.value;recalc()};
   const nz=(id,key,lo,hi)=>{const n=document.getElementById(id);n.onchange=()=>{const v=parseFloat(n.value);if(isFinite(v)&&v>=lo&&v<=hi){CFG[key]=v;recalc()}else n.value=CFG[key]}};
-  nz("setTh1","th1",0.5,50);nz("setTh2","th2",1,80);nz("setThF1","thF1",0.5,50);nz("setThF2","thF2",1,80);nz("setP1","p1",10,120);nz("setP2","p2",40,300);
+  nz("setTh1","th1",0.5,50);nz("setTh2","th2",1,80);nz("setThF1","thF1",0.5,50);nz("setThF2","thF2",1,80);nz("setThM1","thM1",0.5,50);nz("setThM2","thM2",1,80);nz("setThE1","thE1",0.5,30);nz("setThE2","thE2",1,30);nz("setP1","p1",10,120);nz("setP2","p2",40,300);
   CFG.mt.forEach((_,i)=>{
     const n=document.getElementById("setM"+i);
     n.onchange=()=>{const v=parseFloat(n.value);if(isFinite(v)&&v>=1&&v<=99){CFG.mt[i]=v;recalc()}else n.value=CFG.mt[i]};
@@ -7231,7 +7246,7 @@ function go(p){
 }
 function renderFoot(){
   const R=PHR();
-  const base=`階段劃分：布局 ${R[0]}、中盤 ${R[1]}、官子 ${R[2]}。每手勝率損失＝該手的勝率，與 AI 在同一局面的最佳著點相比少掉多少（只計負向），目前只計算打這手之前勝率落在 ${BAND().short} 的著手。「勝率下跌 ◯% 以上的著手」是指下了那一手之後自己的勝率掉了 ◯ 個百分點以上的手數，顯示的是每局平均（目前設定：${CFG.mt.join("% / ")}%）。棋譜檢討標記的是 −${CFG.th1}% 以上（大失著為 −${CFG.th2}% 以上）的手，布局是 −${CFG.thF1}% 以上（大失著 −${CFG.thF2}% 以上）。AI 吻合度（前三選）＝實戰著手落在 AI 讀完（500 visits）後的前 3 名之內的比例；（最佳手）則是正好第 1 名的比例。常用布局依${CFG.omode!=="both"?`研究對象自己的前 ${CFG.oself} 子`:`雙方的前 ${CFG.depth} 手`}分組，並在 8 種對稱下合併。常用定石是前 ${JLIM} 手內同一個角（含中線 10×10 路）裡依序下的著手。`;
+  const base=`階段劃分：布局 ${R[0]}、中盤 ${R[1]}、官子 ${R[2]}。每手勝率損失＝該手的勝率，與 AI 在同一局面的最佳著點相比少掉多少（只計負向），目前只計算打這手之前勝率落在 ${BAND().short} 的著手。「勝率下跌 ◯% 以上的著手」是指下了那一手之後自己的勝率掉了 ◯ 個百分點以上的手數，顯示的是每局平均（目前設定：${CFG.mt.join("% / ")}%）。對局檢討標記的失誤：布局勝率掉 ${CFG.thF1}% 以上、中盤掉 ${CFG.thM1}% 以上、官子目數損失 ${CFG.thE1} 目以上（大失誤：${CFG.thF2}%／${CFG.thM2}%／${CFG.thE2} 目）。AI 吻合度（前三選）＝實戰著手落在 AI 讀完（500 visits）後的前 3 名之內的比例；（最佳手）則是正好第 1 名的比例。常用布局依${CFG.omode!=="both"?`研究對象自己的前 ${CFG.oself} 子`:`雙方的前 ${CFG.depth} 手`}分組，並在 8 種對稱下合併。常用定石是前 ${JLIM} 手內同一個角（含中線 10×10 路）裡依序下的著手。`;
   document.getElementById("foot").innerHTML=
     MODE==="data"?base+` 棋譜為 ${INDEX?INDEX.n.toLocaleString():""} 局 KataGo 逐手分析結果（500 visits），勝率皆為黑棋視角換算。`
     :MODE==="sgf"?base+" 資料來自你載入的 SGF。"
