@@ -999,7 +999,7 @@ const S={page:"ov",subject:"",col:"all",per:"n0",from:"",to:"",fuTab:"op",fuSel:
   seP:"",sePC:"any",seOpp:"",seFrom:"",seTo:"",
   rdMode:"abs",rdBand:true,refAvg:true,refT10:true,refTop:true,rkMet:"Rt",rkMin:20,rkMore:50,rkJump:false,ovReg:[],cpA:"",cpB:"",cpFill:"B",
   /* 常用布局（卡片）與常用定石 */
-  fuSort:"n",fuSortSaved:"n",opMin:2,opMore:12,opGame:null,opLv:4,rcF:null,opSrc:"me",opChain:[],opSel:"",opSelLv:0,opRow:null,
+  fuSort:"n",fuSortSaved:"n",opMin:1,opMore:12,opGame:null,opLv:4,rcF:null,opSrc:"me",opChain:[],opSel:"",opSelLv:0,opRow:null,
   jsSrc:"me",jsRole:"all",jsK:4,jsSort:"n",jsPath:"",jsNb:"",jsSel:null,jsStep:null,jsMore:12,jsThumbs:12,
   jsOri:"norm",jsCorner:1,jsBoard:"full",jsOth:false,jsCfgMore:8,jsCfgSort:"n",jsNote:"",jsLv:2,jsCt:"all",jsFollow:false};
 const LSK="go-lab-v2";
@@ -2525,7 +2525,18 @@ function renderFU(){
    布局檢索：雙方前 4／10／20 手的「全盤配置」。手順不同、配置一樣的算同一種（同形合併）；
    方向一律黑第一手在右上（只在原樣與沿右上對角線翻兩種裡選）。點卡片＝走到那個布局，下一段只列出接在它後面的變化。
    另外保留「自己的子」：只看研究對象自己的前幾子（有布局名稱） */
-const OPLV=[4,10,20];
+const OPLV=[4,10],OPMAX=50;
+/* 前 10 手之後不用固定手數：從 from+1 手起一手一手比，找出這幾局第一次不一樣的那一手（分水嶺）。
+   比的是全盤配置（同形合併，和卡片一樣）。到 OPMAX 手（布局索引只收前 50 手）或棋局結束都一樣就回傳 null */
+function opSplit(base,from){
+  for(let k=from+1;k<=OPMAX;k++){
+    let first=true,k0=null;
+    for(const it of base){const kk=opK(it,k),v=kk?kk.key:null;
+      if(first){k0=v;first=false}else if(v!==k0)return k}
+    if(k0==null)return null;
+  }
+  return null;
+}
 /* get(k)＝第 k 手 {p,c}；回傳 {key＝排序過的子（同形合併用）, seq＝這一局的手順（同樣的方向）} */
 function opKey(get,len,N){
   if(len<N)return null;
@@ -2570,8 +2581,10 @@ function renderOP(el,L){
   let base=items.filter(it=>S.opChain.every(c=>{const k=opK(it,c.lv);return k&&k.key===c.key}));
   if(S.opChain.length&&!base.length){S.opChain=[];base=items}
   const follow=S.opChain.length>0,lastLv=follow?S.opChain[S.opChain.length-1].lv:0;
-  let N=OPLV.includes(S.opLv)?S.opLv:4;
-  if(follow&&N<=lastLv)N=OPLV.find(v=>v>lastLv)||20;
+  let N=OPLV.includes(S.opLv)?S.opLv:4,auto=false,same=false;
+  /* 已經點過 10 手的卡片：自動找下一個分歧點 */
+  if(follow&&lastLv>=10){auto=true;N=opSplit(base,lastLv);if(N==null){same=true;N=lastLv}}
+  else if(follow&&N<=lastLv)N=OPLV.find(v=>v>lastLv)||10;
   const winLab=all?"黑勝率":`${who()} 的勝率`;
   /* 分組 */
   const m=new Map();
@@ -2579,8 +2592,8 @@ function renderOP(el,L){
     if(!e){e={key:k.key,n:0,w:0,d:0,nb:0,seqs:new Map(),its:[]};m.set(k.key,e)}
     e.n++;if(it.win===true)e.w++;if(it.win!=null)e.d++;if(it.c==="B")e.nb++;
     e.seqs.set(k.seq,(e.seqs.get(k.seq)||0)+1);e.its.push(it)});
-  let fs=[...m.values()];
-  const short=base.length-fs.reduce((a,e)=>a+e.n,0);
+  let fs=same?[]:[...m.values()];
+  const short=same?0:base.length-fs.reduce((a,e)=>a+e.n,0);
   let hidden="";
   /* 全部棋譜的 10、20 手幾乎每局都不一樣：一開始不列只出現 1 次的（接在某個布局之後時全部列出，等於是那些實戰的清單） */
   if(all&&N>=10&&!follow){const one=fs.filter(e=>e.n<2).length;if(one&&one<fs.length){fs=fs.filter(e=>e.n>=2);hidden=`另有 ${one.toLocaleString()} 種只出現 1 次（沒有列出；先選一個 4 手或 10 手的布局，就會列出接在它後面的每一局）。`}}
@@ -2611,7 +2624,7 @@ function renderOP(el,L){
   };
   const repSeq=e=>[...fitE(e).entries()].sort((a,b)=>b[1]-a[1])[0][0];
   const card=(e,i)=>{const w=wr(e),on=selLv===N&&selKey===e.key;
-    return `<button class="ocard${on?" on":""}" data-opk="${e.key}" data-ops="${repSeq(e)}" aria-pressed="${on}">
+    return `<button class="ocard${on?" on":""}" data-opk="${e.key}" data-ops="${repSeq(e)}" data-opn="${e.n}" aria-pressed="${on}">
       <div class="oc-h"><b>${i+1}</b>${all?"":pcolHTML(e.nb,e.n,"局")}<span class="sub num">${e.n} 局 · ${Math.round(e.n/(base.length||1)*100)}%</span></div>
       ${miniSVG(seqStones(repSeq(e)),{nums:true,label:`前 ${N} 手的布局`})}
       <div class="oc-s"><span class="num ${all?"":pctCls(w)}">${w==null?winLab+" —":(all?"黑勝 ":"勝率 ")+Math.round(w)+"%"}</span><span class="sub num">${e.w} 勝 ${e.d-e.w} 敗</span></div>
@@ -2621,12 +2634,12 @@ function renderOP(el,L){
   ${fuTabs()}
   <div class="fu-ctl">
     <span class="segw"><span class="seglab">資料</span>${segHTML("opSrc",S.opSrc,[["me",who()],["all",MODE==="data"?"全部棋譜":"全部載入的棋譜"]])}</span>
-    <span class="segw"><span class="seglab">檢索</span>${segHTML("opLv",N,OPLV.filter(v=>!follow||v>lastLv).map(v=>[v,`雙方前 ${v} 手`]))}</span>
+    <span class="segw"><span class="seglab">檢索</span>${auto?`<span class="sub">${same?"之後沒有分歧":`自動找分歧：第 ${N} 手開始不一樣`}</span>`:segHTML("opLv",N,OPLV.filter(v=>!follow||v>lastLv).map(v=>[v,`雙方前 ${v} 手`]))}</span>
     <span class="segw"><span class="seglab">排序</span>${segHTML("opSort",srt,[["n","最常下"],["hi","勝率高"],["lo","勝率低"]])}</span>
     ${srt!=="n"?`<label class="sub">至少 <select id="opMin" class="numsel">${[1,2,3,5].map(v=>`<option value="${v}"${S.opMin===v?" selected":""}>${v} 局</option>`).join("")}</select></label>`:""}
   </div>
-  ${follow?`<div class="jfollow"><span class="oicon">${miniSVG(seqStones(followTxt),{icon:true,label:"目前的布局"})}</span><span>接在目前的布局（前 ${lastLv} 手，${base.length} 局）之後，列出前 ${N} 手的變化</span><button class="btn-link" id="opUnf">✕ 不限目前的布局</button></div>`:""}
-  <p class="jnote" style="margin:0 0 8px">同一個全盤配置算同一種（手順不同也合併，數字是最常見的手順）· 方向一律黑第一手在右上，並照實戰最常見的擺法（黑子在右邊、白子在左上）· 勝率＝${winLab}${short>0?` · ${short} 局不到 ${N} 手，沒有算進來`:""}。點一張卡片＝下方列出那個布局的實戰${N<20?`，上面換成接在它後面的前 ${OPLV.find(v=>v>N)} 手`:""}。</p>
+  ${follow?`<div class="jfollow"><span class="oicon">${miniSVG(seqStones(followTxt),{icon:true,label:"目前的布局"})}</span><span>接在目前的布局（前 ${lastLv} 手，${base.length} 局）之後，${same?`這 ${base.length} 局到第 ${OPMAX} 手（或棋局結束）都一樣，下面直接列出`:auto?`第 ${N} 手開始分歧，依前 ${N} 手分組`:`列出前 ${N} 手的變化`}</span><button class="btn-link" id="opBack">← 上一層</button><button class="btn-link" id="opUnf">✕ 不限目前的布局</button></div>`:""}
+  <p class="jnote" style="margin:0 0 8px">同一個全盤配置算同一種（手順不同也合併，數字是最常見的手順）· 方向一律黑第一手在右上，並照實戰最常見的擺法（黑子在右邊、白子在左上）· 勝率＝${winLab}${short>0?` · ${short} 局不到 ${N} 手，沒有算進來`:""}。點一張卡片＝下方列出那個布局的實戰，上面換成接在它後面的${N<10?"前 10 手":"下一個分歧點（自動找出幾局開始不一樣的那一手）"}；只有 1 局的卡片直接顯示那一局。</p>
   ${hidden?`<p class="jnote" style="margin:0 0 8px">${esc(hidden)}</p>`:""}
   ${fs.length?`<div class="ocards">${show.map(card).join("")}</div>${fs.length>show.length?`<button class="more" id="opMore">顯示更多（還有 ${fs.length-show.length} 種）</button>`:""}`
     :`<p class="sub">這個條件下沒有符合的布局${srt!=="n"?"，可以把「至少」的局數調低":""}。</p>`}
@@ -2664,10 +2677,13 @@ function renderOP(el,L){
   const om=document.getElementById("opMin");if(om)om.onchange=e=>{S.opMin=+e.target.value;rr()};
   const mb=document.getElementById("opMore");if(mb)mb.onclick=()=>{S.opMore+=12;rr()};
   const uf=document.getElementById("opUnf");if(uf)uf.onclick=()=>{S.opChain=[];S.opSel="";S.opSelLv=0;S.opLv=4;S.opMore=12;rr()};
-  /* 點卡片：下方列出它的實戰；還沒到 20 手就往下一段（只列接在它後面的變化） */
+  /* 上一層：拿掉最後點的那一段，並在那一層把剛剛點的卡片標成選取 */
+  const ob=document.getElementById("opBack");if(ob)ob.onclick=()=>{const p=S.opChain[S.opChain.length-1];S.opChain=S.opChain.slice(0,-1);
+    S.opLv=p.lv<=10?p.lv:10;S.opSel=p.key;S.opSelLv=p.lv;S.opGame=null;S.opRow=null;S.fuStep=null;S.opMore=12;rr()};
+  /* 點卡片：下方列出它的實戰；2 局以上就往下一段（4 手→10 手→之後自動找分歧點）；只有 1 局的直接選它 */
   el.querySelectorAll("[data-opk]").forEach(b=>b.onclick=()=>{
-    const k=b.dataset.opk;S.opGame=null;S.opRow=null;S.fuStep=null;if(N<20)S.opMore=12;
-    if(N<20){S.opChain=S.opChain.concat([{lv:N,key:k,seq:b.dataset.ops}]);S.opSel="";S.opSelLv=0;S.opLv=OPLV.find(v=>v>N)}
+    const k=b.dataset.opk,deeper=+b.dataset.opn>=2&&N<OPMAX;S.opGame=null;S.opRow=null;S.fuStep=null;if(deeper)S.opMore=12;
+    if(deeper){S.opChain=S.opChain.concat([{lv:N,key:k,seq:b.dataset.ops}]);S.opSel="";S.opSelLv=0;S.opLv=N<10?10:N}
     else{S.opSel=k;S.opSelLv=N}
     rr();revealEl("opDetail");
   });
