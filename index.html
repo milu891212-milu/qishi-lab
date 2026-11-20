@@ -638,6 +638,35 @@ table.rk tr.me td{color:var(--accent-ink)}
 .fu-ctl label{display:inline-flex;align-items:center;gap:6px}
 .fu-sec{margin:18px 0 10px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
 .fu-sec p{margin:0;font-size:12px;color:var(--muted)}
+.ocw{display:grid;gap:2px;min-width:0;align-content:start}
+.hwbtn{border:0;background:none;color:var(--accent);font:inherit;font-size:12.5px;cursor:pointer;padding:3px 4px;text-align:center}
+.hwbtn:hover{text-decoration:underline}
+/* 如何下成此配置：右邊滑出的面板 */
+.hwov{position:fixed;inset:0;z-index:250}
+.hwbk{position:absolute;inset:0;background:rgba(0,0,0,.35)}
+.hwp{position:absolute;right:0;top:0;bottom:0;width:min(480px,100%);background:var(--bg);box-shadow:-4px 0 18px rgba(0,0,0,.18);display:flex;flex-direction:column;outline:none}
+.hwh{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);font-size:16px}
+.hwb{overflow-y:auto;padding:10px 16px 40px;overscroll-behavior:contain;flex:1}
+.hws{padding:4px 0 14px;border-bottom:1px solid var(--line);margin-bottom:10px}
+.hws h3{margin:4px 0 2px;font-size:18px}
+.hws p{margin:4px 0}
+.hwsd{font-size:12.5px;color:var(--accent-ink);letter-spacing:.05em}
+.hwr{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:10px 0;background:var(--surface)}
+.hwrh{display:flex;gap:4px 8px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
+.hwrh .sub{margin-left:auto}
+.hwst{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:6px;padding:4px 0;border-bottom:1px dashed var(--line);font-size:13.5px;align-items:baseline}
+.hwst:last-of-type{border-bottom:0}
+.hww{font-size:12px;color:var(--muted)}
+.hwst.me .hww{color:var(--accent);font-weight:700}
+.hwrk{font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--accent-ink);white-space:nowrap}
+.hwr .pbtn{margin-top:6px}
+.hwctl{display:flex;gap:8px;margin:6px 0}
+.hwctl button:disabled{opacity:.45;cursor:default}
+.hwbd svg{width:100%;height:auto;display:block}
+.hwpath{display:flex;flex-wrap:wrap;gap:2px 12px;margin:6px 0}
+.hwpath .pbtn{font-size:12.5px}
+.hwnode{font-size:13.5px;margin-top:6px}
+.list .row.hwopt{grid-template-columns:18px minmax(0,1fr) auto 70px}
 .ocards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(176px,calc(50% - 6px)),1fr));gap:12px}
 .ocard{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:10px;display:grid;gap:6px;text-align:left;min-width:0;align-content:start}
 .ocard:hover{border-color:var(--accent)}
@@ -2568,6 +2597,7 @@ const flip7=g=>({...g,setup:(g.setup||[]).map(q=>({...q,p:tPt(q.p,7)})),
   mist:(g.mist||[]).map(x=>({...x,rec:x.rec&&tPt(x.rec,7)}))});
 const seqStones=seq=>{const o=[];for(let i=0;i+2<seq.length;i+=3){const[x,y]=xy(seq.substr(i+1,2));o.push({x,y,c:seq[i],n:o.length+1})}return o};
 function renderOP(el,L){
+  closeHow();
   const all=S.opSrc==="all";
   if(all&&MODE==="data"&&!OPENROWS&&!OPENERR){
     el.innerHTML=`<section class="panel"><div class="panel-h"><h2>布局研究</h2></div>${fuTabs()}<p class="sub">載入全部棋譜的布局資料（${INDEX?INDEX.n.toLocaleString():""} 局，約 1.2 MB）…</p></section>`;
@@ -2626,12 +2656,12 @@ function renderOP(el,L){
   };
   const repSeq=e=>[...fitE(e).entries()].sort((a,b)=>b[1]-a[1])[0][0];
   const card=(e,i)=>{const w=wr(e),on=selLv===N&&selKey===e.key;
-    return `<button class="ocard${on?" on":""}" data-opk="${e.key}" data-ops="${repSeq(e)}" data-opn="${e.n}" aria-pressed="${on}">
+    return `<div class="ocw"><button class="ocard${on?" on":""}" data-opk="${e.key}" data-ops="${repSeq(e)}" data-opn="${e.n}" aria-pressed="${on}">
       <div class="oc-h"><b>${i+1}</b>${all?"":pcolHTML(e.nb,e.n,"局")}<span class="sub num">${e.n} 局 · ${Math.round(e.n/(base.length||1)*100)}%</span></div>
       ${miniSVG(seqStones(repSeq(e)),{nums:true,label:`前 ${N} 手的布局`})}
       <div class="oc-s"><span class="num ${all?"":pctCls(w)}">${w==null?winLab+" —":(all?"黑勝 ":"勝率 ")+Math.round(w)+"%"}</span><span class="sub num">${e.w} 勝 ${e.d-e.w} 敗</span></div>
       <div class="meter"><i style="width:${w||0}%;background:${w==null?"var(--faint)":all?"var(--accent)":w>=50?"var(--good)":"var(--bad)"}"></i></div>
-      ${fitE(e).size>1?`<div class="sub">手順 ${fitE(e).size} 種（同形合併）</div>`:""}</button>`};
+      ${fitE(e).size>1?`<div class="sub">手順 ${fitE(e).size} 種（同形合併）</div>`:""}</button><button class="hwbtn" data-how="${e.key}">如何下成此配置</button></div>`};
   let h=`<section class="panel"><div class="panel-h"><h2>布局研究</h2><p>${all?"全部棋譜":`${who()} 的對局（${S.col==="all"?"執黑、執白":S.col==="B"?"僅執黑":"僅執白"}）`} · ${items.length.toLocaleString()} 局</p></div>
   ${fuTabs()}
   <div class="fu-ctl">
@@ -2689,6 +2719,10 @@ function renderOP(el,L){
     else{S.opSel=k;S.opSelLv=N}
     rr();revealEl("opDetail");
   });
+  /* 卡片下方的「如何下成此配置」：右邊滑出路線說明（卡片畫的方向） */
+  el.querySelectorAll("[data-how]").forEach(b=>b.onclick=()=>{const e=m.get(b.dataset.how);if(!e)return;
+    const q=repSeq(e),toks=[];for(let i=0;i+2<q.length;i+=3)toks.push(q.substr(i,3));
+    b.disabled=true;b.textContent="計算中…";setTimeout(()=>{openHow({e,N,items,all,toks});b.disabled=false;b.textContent="如何下成此配置"},20)});
   el.querySelectorAll("[data-og]").forEach(b=>b.onclick=()=>{S.opGame=+b.dataset.og;S.fuStep=null;rr()});
   el.querySelectorAll("[data-opr]").forEach(b=>b.onclick=()=>{const it=items[+b.dataset.opr];S.opRow=it?it.r:null;S.fuStep=null;rr()});
   if(vg){
@@ -2696,6 +2730,189 @@ function renderOP(el,L){
     el.querySelectorAll("[data-opo]").forEach(b=>b.onclick=()=>openFound(selRow.r,b.dataset.opo));
     vwBind("op",vg,"fuStep",{start:selLv});
   }
+}
+/* ---------- 如何下成此配置（常用布局卡片的路線說明） ----------
+   布局名稱：kifuai（前輩外包的分析網站）用的 121 種開局定義［名稱, 黑子, 白子, 必須空著的點］，
+   任一個對稱方向符合就算，取子數最多的那一個。
+   路線＝走到卡片那個配置的不同手順：每一手之後的盤面都一樣（含 8 個對稱方向）才算同一條。
+   機率＝研究對象在「同一個盤面」底下（他執同一色的所有對局）下每一種下一手的比例；對手的手只列局數。
+   全部棋譜時沒有研究對象，每一手都列比例 */
+const KN=[["向小","qdcd","","bncccecndcdddeecedeefcfdfefqfrncndnenqnrocodoepcpdpeqcqeqnrn"],["向小白向小","qdcd","qpcp","cccecocqdcdddedodpdqecedeeeoepeqfcfdfefofpfqncndnenonpnqocodoeooopoqpcpdpepopppqqcqeqoqq"],["向小白星小1","qdcd","dpqp","cccecncocpcqdcdddedodqecedeeepeqfcfdfefqncndnenonpnqocodoeooopoqpcpdpepopppqqcqeqoqq"],["向小白星小2","qdcd","ppdq","cccecncocpcqdcdddedndodpecedeeeneoepeqfcfdfencndnenqocodoeopoqpcpdpepopqqcqeqnqoqpqq"],["向小白錯小","qdcd","qpdq","cccecncocpcqdcdddedndodpecedeeeneoepeqfcfdfencndnenonpnqocodoeooopoqpcpdpepopppqqcqeqoqq"],["向小白雙星","qdcd","ppdp","cccecncocpcqdcdddedodqecedeeepeqfcfdfefqncndnenqocodoeopoqpcpdpepopqqcqeqnqoqpqq"],["對小","qdqp","","bfbncfcnfbfcfqfrncndnenonpnqocodoeooopoqpcpdpepopppqqcqeqoqq"],["對小白星小","qdqp","dpdc","cccdcecfcncocpcqdddedfdodqecedeeefepeqfqncndnenonpnqocodoeooopoqpcpdpepopppqqcqeqoqq"],["對小白雙星","qdqp","dpdd","cccdcecfcncocpcqdcdedodqecedepeqfcfqncndnenonpnqocodoeooopoqpcpdpepopppqqcqeqoqq"],["小目斜小目1","qddq","","cncocpcqdndodpeneoepeqncndneocodoepcpdpeqcqe"],["小目斜小目2","qdcp","","cocqdodpdqeoepeqfofpfqncndneocodoepcpdpeqcqe"],["小目斜星位","qddp","","cncocpcqdqeqfqncndneocodoepcpdpeqcqe"],["星三三","pdcq","dp","cccdcecfcncocpdcdddedqecedeqfcfqnqopoqpopppqqnqoqpqq"],["星小","pdpq","","bfbncfcnfbfcfqfrncocodonooopoqpcpepnpoppqcqdqeqfqnqoqpqq"],["星小2","pdqp","","bfbncfcnfbfcfqfrncnonpnqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2大跳","pdqpnp","","bfbncfcnfbfcfqfrncnonqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2大跳白向小","pdqpnp","dqdc","cccdcecfcncocpcqdddedfdndodpecedeeefeneoepeqncnonqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2大跳白星小1","pdqpnp","dpdc","cccdcecfcncocpcqdddedfdodqecedeeefepeqfqncnonqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2大跳白星小2","pdqpnp","dddq","cccdcecfcncocpcqdcdedndodpecedeneoepeqfcncnonqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2大跳白星小3","pdqpnp","ddcp","cccdcecfcocqdcdedodpdqecedeoepeqfcfofpfqncnonqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2大跳白星小4","pdqpnp","dpcd","cccecncocpcqdcdddedodqecedeeepeqfcfdfefqncnonqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2大跳白錯小1","pdqpnp","cpdc","cccdcecfcocqdddedfdodpdqecedeeefeoepeqfofpfqncnonqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2大跳白錯小2","pdqpnp","dqcd","cccecncocpcqdcdddedndodpecedeeeneoepeqfcfdfencnonqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2大跳白雙星","pdqpnp","dpdd","cccdcecfcncocpcqdcdedodqecedepeqfcfqncnonqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2小跳","pdqpop","","bfbncfcnfbfcfqfrncnonpnqocodoooqpcpepopppqqcqdqeqfqoqq"],["星小2小跳白向小","pdqpop","dqdc","cccdcecfcncocpcqdddedfdndodpecedeeefeneoepeqncnonpnqocodoooqpcpepopppqqcqdqeqfqoqq"],["星小2小跳白星小","pdqpop","dpdc","cccdcecfcncocpcqdddedfdodqecedeeefepeqfqncnonpnqocodoooqpcpepopppqqcqdqeqfqoqq"],["星小2小跳白星小2","pdqpop","dddq","cccdcecfcncocpcqdcdedndodpecedeneoepeqfcncnonpnqocodoooqpcpepopppqqcqdqeqfqoqq"],["星小2小跳白星小3","pdqpop","ddcp","cccdcecfcocqdcdedodpdqecedeoepeqfcfofpfqncnonpnqocodoooqpcpepopppqqcqdqeqfqoqq"],["星小2小跳白星小4","pdqpop","dpcd","cccecncocpcqdcdddedodqecedeeepeqfcfdfefqncnonpnqocodoooqpcpepopppqqcqdqeqfqoqq"],["星小2小跳白錯小1","pdqpop","cpdc","cccdcecfcocqdddedfdodpdqecedeeefeoepeqfofpfqncnonpnqocodoooqpcpepopppqqcqdqeqfqoqq"],["星小2小跳白錯小2","pdqpop","dqcd","cccecncocpcqdcdddedndodpecedeeeneoepeqfcfdfencnonpnqocodoooqpcpepopppqqcqdqeqfqoqq"],["星小2小跳白雙星","pdqpop","dpdd","cccdcecfcncocpcqdcdedodqecedepeqfcfqncnonpnqocodoooqpcpepopppqqcqdqeqfqoqq"],["星小2白向小","pdqp","dcdq","cccdcecfcncocpcqdddedfdndodpecedeeefeneoepeqncnonpnqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2白星小1","pdqp","dpdc","cccdcecfcncocpcqdddedfdodqecedeeefepeqfqncnonpnqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2白星小2","pdqp","dddq","cccdcecfcncocpcqdcdedndodpecedeneoepeqfcncnonpnqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2白星小3","pdqp","ddcp","cccdcecfcocqdcdedodpdqecedeoepeqfcfofpfqncnonpnqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2白星小4","pdqp","dpcd","cccecncocpcqdcdddedodqecedeeepeqfcfdfefqncnonpnqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2白錯小1","pdqp","dccp","cccdcecfcocqdddedfdodpdqecedeeefeoepeqfofpfqncnonpnqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2白錯小2","pdqp","dqcd","cccecncocpcqdcdddedndodpecedeeeneoepeqfcfdfencnonpnqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小2白雙星","pdqp","dpdd","cccdcecfcncocpcqdcdedodqecedepeqfcfqncnonpnqocodooopoqpcpepopppqqcqdqeqfqoqq"],["星小大跳","pdpqpn","","bfbncfcnfbfcfqfrncocodonooopoqpcpepoppqcqdqeqfqnqoqpqq"],["星小大跳白向小","pdpqpn","dqdc","cccdcecfcncocpcqdddedfdndodpecedeeefeneoepeqncocodonooopoqpcpepoppqcqdqeqfqnqoqpqq"],["星小大跳白星小1","pdpqpn","dpdc","cccdcecfcncocpcqdddedfdodqecedeeefepeqfqncocodonooopoqpcpepoppqcqdqeqfqnqoqpqq"],["星小大跳白星小2","pdpqpn","dddq","cccdcecfcncocpcqdcdedndodpecedeneoepeqfcncocodonooopoqpcpepoppqcqdqeqfqnqoqpqq"],["星小大跳白星小3","pdpqpn","ddcp","cccdcecfcocqdcdedodpdqecedeoepeqfcfofpfqncocodonooopoqpcpepoppqcqdqeqfqnqoqpqq"],["星小大跳白星小4","pdpqpn","dpcd","cccecncocpcqdcdddedodqecedeeepeqfcfdfefqncocodonooopoqpcpepoppqcqdqeqfqnqoqpqq"],["星小大跳白錯小1","pdpqpn","cpdc","cccdcecfcocqdddedfdodpdqecedeeefeoepeqfofpfqncocodonooopoqpcpepoppqcqdqeqfqnqoqpqq"],["星小大跳白錯小2","pdpqpn","dqcd","cccecncocpcqdcdddedndodpecedeeeneoepeqfcfdfencocodonooopoqpcpepoppqcqdqeqfqnqoqpqq"],["星小大跳白雙星","pdpqpn","dddp","cccdcecfcncocpcqdcdedodqecedepeqfcfqncoconooopoqpcpoppqcqdqeqfqnqoqpqq"],["星小小跳","pdpqpo","","bfbncfcnfbfcfqfrncocodonooopoqpcpepnppqcqdqeqfqnqoqpqq"],["星小小跳白向小","pdpqpo","dqdc","cccdcecfcncocpcqdddedfdndodpecedeeefeneoepeqncocodonooopoqpcpepnppqcqdqeqfqnqoqpqq"],["星小小跳白星小1","pdpqpo","dpdc","cccdcecfcncocpcqdddedfdodqecedeeefepeqfqncocodonooopoqpcpepnppqcqdqeqfqnqoqpqq"],["星小小跳白星小2","pdpqpo","dddq","cccdcecfcncocpcqdcdedndodpecedeneoepeqfcncocodonooopoqpcpepnppqcqdqeqfqnqoqpqq"],["星小小跳白星小3","pdpqpo","ddcp","cccdcecfcocqdcdedodpdqecedeoepeqfcfofpfqncocodonooopoqpcpepnppqcqdqeqfqnqoqpqq"],["星小小跳白星小4","pdpqpo","dpcd","cccecncocpcqdcdddedodqecedeeepeqfcfdfefqncocodonooopoqpcpepnppqcqdqeqfqnqoqpqq"],["星小小跳白錯小1","pdpqpo","cpdc","cccdcecfcocqdddedfdodpdqecedeeefeoepeqfofpfqncocodonooopoqpcpepnppqcqdqeqfqnqoqpqq"],["星小小跳白錯小2","pdpqpo","dqcd","cccecncocpcqdcdddedndodpecedeeeneoepeqfcfdfencocodonooopoqpcpepnppqcqdqeqfqnqoqpqq"],["星小小跳白雙星","pdpqpo","dpdd","cccdcecfcncocpcqdcdedodqecedepeqfcfqncocodonooopoqpcpepnppqcqdqeqfqnqoqpqq"],["星小白向小","pdpq","dqdc","cccdcecfcncocpcqdddedfdndodpecedeeefeneoepeqncocodonooopoqpcpepnpoppqcqdqeqfqnqoqpqq"],["星小白星小1","pdpq","dpdc","cccdcecfcncocpcqdddedfdodqecedeeefepeqfqncocodonooopoqpcpepnpoppqcqdqeqfqnqoqpqq"],["星小白星小2","pdpq","dddq","cccdcecfcncocpcqdcdedndodpecedeneoepeqfcncocodonooopoqpcpepnpoppqcqdqeqfqnqoqpqq"],["星小白星小3","pdpq","ddcp","cccdcecfcocqdcdedodpdqecedeoepeqfcfofpfqncocodonooopoqpcpepnpoppqcqdqeqfqnqoqpqq"],["星小白星小4","pdpq","dpcd","cccecncocpcqdcdddedodqecedeeepeqfcfdfefqncocodonooopoqpcpepnpoppqcqdqeqfqnqoqpqq"],["星小白錯小1","pdpq","cpdc","cccdcecfcocqdddedfdodpdqecedeeefeoepeqfofpfqncocodonooopoqpcpepnpoppqcqdqeqfqnqoqpqq"],["星小白錯小2","pdpq","dqcd","cccecncocpcqdcdddedndodpecedeeeneoepeqfcfdfencocodonooopoqpcpepnpoppqcqdqeqfqnqoqpqq"],["星小白雙星","pdpq","dpdd","cccdcecfcncocpcqdcdedodqecedepeqfcfqncocodonooopoqpcpepnpoppqcqdqeqfqnqoqpqq"],["星斜小目1","pdcp","","cocqdodpdqeoepeqfofpfqncocodonooopoqpcpepnpopppqqcqdqeqfqnqoqpqq"],["星斜小目2","pddq","","cncocpcqdndodpeneoepeqncocodonooopoqpcpepnpopppqqcqdqeqfqnqoqpqq"],["星斜星","pddp","","cncocpcqdodqepeqfqncocodpcpeqcqdqeqf"],["金毛","pdncpq","","bfbncfcnfbfcfqfrmcmdndocodooopoqpcpjpkplpmpnpoppqcqfqjqkqlqmqnqoqpqq"],["錯小","qdpq","","bfbncfcnfbfcfqfrncndneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小大跳","pqcppn","","bfcfcocqdodpdqeoepeqfbfcfofpfqnbnconooopoqpoppqfqnqoqpqqrf"],["錯小大跳白向小","qdpqnd","dcdq","cccdcecfcncocpcqdddedfdndodpecedeeefeneoepeqncneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小大跳白星小1","qdpqnd","dpdc","cccdcecfcncocpcqdddedfdodqecedeeefepeqfqncneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小大跳白星小2","qdpqnd","dddq","cccdcecfcncocpcqdcdedndodpecedeneoepeqfcncneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小大跳白星小3","qdndpq","ddcp","cccdcecfcocqdcdedodpdqecedeoepeqfcfofpfqncneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小大跳白星小4","qdndpq","dpcd","cccecncocpcqdcdddedodqecedeeepeqfcfdfefqncneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小大跳白錯小1","qdpqnd","dccp","cccdcecfcocqdddedfdodpdqecedeeefeoepeqfofpfqncneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小大跳白錯小2","qdndpq","dqcd","cccecncocpcqdcdddedndodpecedeeeneoepeqfcfdfencneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小大跳白雙星位","pqqdnd","dddp","cccdcecfcncocpcqdcdedodqecedepeqfcfqncneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小大飛","qdpqnc","","bfbncfcnfbfcfqfrndocodonooopoqpcpdpnpoppqcqnqoqpqq"],["錯小大飛2","qdpqqn","","bfbncfcnfbfcfqfrncndneocodoeonooopoqpcpdpepnpoppqcqeqoqpqq"],["錯小小跳","qdpqod","","bfbncfcnfbfcfqfrncndneocoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小小跳白向小","qdpqod","dcdq","cccdcecfcncocpcqdddedfdndodpecedeeefeneoepeqncndneocoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小小跳白星小1","qdpqod","dpdc","cccdcecfcncocpcqdddedfdodqecedeeefepeqfqncndneocoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小小跳白星小2","qdpqod","dddq","cccdcecfcncocpcqdcdedndodpecedeneoepeqfcncndneocoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小小跳白星小3","qdpqod","ddcp","cccdcecfcocqdcdedodpdqecedeoepeqfcfofpfqncndneocoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小小跳白星小4","qdpqod","dpcd","cccecncocpcqdcdddedodqecedeeepeqfcfdfefqncndneocoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小小跳白錯小1","qdpqod","dccp","cccdcecfcocqdddedfdodpdqecedeeefeoepeqfofpfqncndneocoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小小跳白錯小2","qdpqod","dqcd","cccecncocpcqdcdddedndodpecedeeeneoepeqfcfdfencndneocoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小小跳白雙星","qdpqod","dpdd","cccdcecfcncocpcqdcdedodqecedepeqfcfqncndneocoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小無憂","qdpqoc","","bfbncfcnfbfcfqfrncndneodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小無憂白向小","qdpqoc","dcdq","cccdcecfcncocpcqdddedfdndodpecedeeefeneoepeqncndneodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小無憂白星小1","qdpqoc","dpdc","cccdcecfcncocpcqdddedfdodqecedeeefeoepeqfqncndneodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小無憂白星小2","qdpqoc","dddq","cccdcecfcncocpcqdcdedndodpecedeneoepeqfcncndneodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小無憂白星小3","qdpqoc","ddcp","cccdcecfcocqdcdedodpdqecedeoepeqfcfofpfqncndneodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小無憂白星小4","qdpqoc","dpcd","cccecncocpcqdcdddedodqecedeeepeqfcfdfefqncndneodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小無憂白錯小1","qdpqoc","dccp","cccdcecfcocqdddedfdodpdqecedeeefeoepeqfofpfqncndneodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小無憂白錯小2","qdpqoc","dqcd","cccecncocpcqdcdddedndodpecedeeeneoepeqfcfdfencndneodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小無憂白雙星位","qdpqoc","dpdd","cccdcecfcncocpcqdcdedodqecedepeqfcfqncndneodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小白向小","qdpq","dqdc","cccdcecfcncocpcqdddedfdndodpecedeeefeneoepeqncndneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小白星小1","qdpq","dpdc","cccdcecfcncocpcqdddedfdodqecedeeefeoepeqfqncndneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小白星小2","qdpq","dddq","cccdcecfcncocpcqdcdedndodpecedeeeneoepeqfcncndneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小白星小3","qdpq","ddcp","cccdcecfcocqdcdedodpdqecedeoepeqfcfofpfqncndneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小白星小4","qdpq","dpcd","cccecncocpcqdcdddedodqecedeeepeqfcfdfefqncndneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小白錯小1","qdpq","cpdc","cccdcecfcocqdddedfdodpdqecedeeefeoepeqfofpfqncndneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小白錯小2","qdpq","dqcd","cccecncocpcqdcdddedndodpecedeeeneoepeqfcfdfencndneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["錯小白雙星","qdpq","dddp","cccdcecfcncocpcqdcdedodqecedepeqfcfqncndneocodoeonooopoqpcpdpepnpoppqcqeqnqoqpqq"],["雙星","pdpp","","bfbncfcnfbfcfqfrncnqocodopoqpcpepopqqcqdqeqfqnqoqpqq"],["雙星白向小","pdpp","dqdc","cccdcecfcncocpcqdddedfdndodpecedeeefeneoepeqncnqocodopoqpcpepopqqcqdqeqfqnqoqpqq"],["雙星白星小","pppd","dpdc","cccdcecfcncocpcqdddedfdodqecedeeefepeqfqncnqocodopoqpcpepopqqcqdqeqfqnqoqpqq"],["雙星白星小2","pdpp","ddcp","cccdcecfcocqdcdedodpdqecedeoepeqfcfofpfqncnqocodopoqpcpepopqqcqdqeqfqnqoqpqq"],["雙星白錯小","pdpp","cpdc","cccdcecfcocqdddedfdodpdqecedeeefeoepeqfofpfqncnqocodopoqpcpepopqqcqdqeqfqnqoqpqq"],["雙星白雙星","pdpp","dpdd","cccdcecfcncocpcqdcdedodqecedepeqfcfqncnqocodopoqpcpepopqqcqdqeqfqnqoqpqq"],["三連星","pdpppj","","mcmdmpmqncndnpnqpcpfpgphplpmpnpqqcqdqfqgqhqlqmqnqpqq"],["中國流","pdpqqk","","pcpfpgphpmpnpoppqcqdqfqgqhqmqnqoqp"],["小林流","fqjppq","dp","hqpnpoppqnqoqp"],["迷你中國流","qpfqkq","dp","hphqipiqnpnqopoqpppq"],["迷你中國流變形","qplqfq","dp","hphqipiqjpjqnpnqopoqpppq"],["高中國流","pdpqpk","","pcpfpgphpipmpnpoqcqdqfqgqhqiqmqnqo"]];
+const hwPos=toks=>{let b=null;for(let t=0;t<8;t++){const a=toks.map(s=>s[0]+tPt(s.slice(1),t)).sort().join("");if(b===null||a<b)b=a}return b};
+/* 第 k 手之後的盤面 key（快取在對局上：hk[k]＝key、hs＝依手順的子、hn[k]＝前 k 手有幾顆子） */
+function hwKey(it,k){
+  if(!it.hk){it.hk=[""];it.hs=[];it.hn=[0]}
+  while(it.hk.length<=k){const j=it.hk.length-1;
+    if(j>=it.len){it.hk.push(null);it.hn.push(it.hs.length);continue}
+    const m=it.get(j);if(m&&m.p)it.hs.push(m.c+m.p);it.hn.push(it.hs.length);it.hk.push(hwPos(it.hs))}
+  return it.hk[k];
+}
+/* 把這一局前 k 手的盤面轉到和 ref（排序過的子）一樣的方向：回傳對稱方向 t，找不到回傳 -1 */
+function hwT(it,k,ref){hwKey(it,k);const s=it.hs.slice(0,it.hn[k]);for(let t=0;t<8;t++){if(s.map(q=>q[0]+tPt(q.slice(1),t)).sort().join("")===ref)return t}return -1}
+/* 走到 path（[{c,p}]，畫面上的方向）這個盤面的對局，下一手各下哪裡（同一個盤面合併，點的位置轉成 path 的方向） */
+function hwNext(pool,path){
+  const k=path.length,toks=path.filter(m=>m.p).map(m=>m.c+m.p),key=hwPos(toks),ref=toks.slice().sort().join("");
+  const o=new Map();let n=0,w=0,d=0;
+  for(const it of pool){
+    if(it.len<k||hwKey(it,k)!==key)continue;
+    n++;if(it.win!=null){d++;if(it.win)w++}
+    if(it.len<=k)continue;const m=it.get(k);if(!m||!m.p)continue;
+    const nk=hwKey(it,k+1);let e=o.get(nk);
+    if(!e){const t=hwT(it,k,ref);if(t<0)continue;e={p:tPt(m.p,t),c:m.c,key:nk,n:0,w:0,d:0};o.set(nk,e)}
+    e.n++;if(it.win!=null){e.d++;if(it.win)e.w++}
+  }
+  const opts=[...o.values()].sort((a,b)=>b.n-a.n);
+  return{n,w,d,tot:opts.reduce((a,e)=>a+e.n,0),opts};
+}
+/* 盤面的布局名稱（kifuai 的寫法，例如「星小2白雙星」）；沒有符合的回傳 null */
+function hwNameC(toks){
+  const mp=new Map(toks.map(s=>[s.slice(1),s[0]]));let best=null,bc=0;
+  for(const[nm,b,w,e]of KN){const c=(b.length+w.length)/2;if(c<=bc||c>toks.length)continue;
+    for(let t=0;t<8;t++){let ok=true;
+      for(let i=0;ok&&i<b.length;i+=2)ok=mp.get(tPt(b.substr(i,2),t))==="B";
+      for(let i=0;ok&&i<w.length;i+=2)ok=mp.get(tPt(w.substr(i,2),t))==="W";
+      for(let i=0;ok&&i<e.length;i+=2)ok=!mp.has(tPt(e.substr(i,2),t));
+      if(ok){best=nm;bc=c;break}}}
+  return best?{nm:best,c:bc}:null;
+}
+const hwName=toks=>{const r=hwNameC(toks);return r?r.nm:null};
+/* 一條手順前 8 手內出現過最完整（子最多）的布局名稱：之後的手會佔到名稱要求空著的點，所以不能只看最後的盤面 */
+function hwBest(path){let b=null;const toks=[];path.slice(0,8).forEach(m=>{if(m.p)toks.push(m.c+m.p);const r=hwNameC(toks);if(r&&(!b||r.c>b.c))b=r});return b?b.nm:null}
+/* 「星小2白雙星」→「星小目2、白雙星」（和前輩的報告同樣的寫法） */
+const hwFmt=nm=>nm.replace(/(.)白/,"$1、白").replace(/(星|錯|向|對)小(?=\d|$|、|大|小|無)/g,"$1小目");
+/* 一手的說法：空角＝星位／小目…（和自己前一個角、或對手的子比：同側、斜）；自己的角＝守角；對手的角＝掛角、點三三；其他照位置 */
+const hwQ=(x,y)=>x===9||y===9?-1:(x>9?1:0)+(y>9?2:0),HWQN=["左上","右上","左下","右下"];
+function hwDesc(toks,c,p){
+  if(!p)return "虛手";
+  const[x,y]=xy(p),q=hwQ(x,y),nm=ptName(x,y,19),corner=["星","小目","三三","高目","目外"].includes(nm);
+  const ss=toks.map(s=>{const[a,b]=xy(s.slice(1));return{c:s[0],a,b,q:hwQ(a,b)}});
+  if(q<0)return nm;
+  const inQ=ss.filter(s=>s.q===q);
+  const ln=Math.min(x,y,18-x,18-y)+1;
+  if(!inQ.length){
+    if(!corner)return ln<=4?`${ln} 路的邊`:nm;
+    const own=ss.filter(s=>s.c===c&&s.q>=0),oth=ss.filter(s=>s.q>=0),ref=own.length?own[own.length-1]:oth.length?oth[oth.length-1]:null;
+    if(!ref)return nm==="星"?"星位":nm;
+    return ((ref.q^q)===3?"斜":"同側")+nm;
+  }
+  const mine=inQ.filter(s=>s.c===c),opp=inQ.filter(s=>s.c!==c);
+  const near=arr=>arr.reduce((b,s)=>{const d=Math.max(Math.abs(s.a-x),Math.abs(s.b-y));return !b||d<b.d?{s,d}:b},null);
+  if(mine.length&&!opp.length){
+    const{s}=near(mine),dx=Math.abs(s.a-x),dy=Math.abs(s.b-y),a=Math.min(dx,dy),b=Math.max(dx,dy),sn=ptName(s.a,s.b,19);
+    if(a===1&&b===2)return sn==="小目"?"無憂角":"小飛守角";
+    if(a===0&&b===2)return "小跳守角";
+    if(a===0&&b===3)return "大跳守角";
+    if(a===1&&b===3)return "大飛守角";
+    return `守${HWQN[q]}角`;
+  }
+  if(opp.length&&!mine.length){
+    const{s,d}=near(opp);
+    if(nm==="三三"&&ptName(s.a,s.b,19)==="星")return "點三三";
+    if(d<=4)return ln===3?"低掛":ln===4?"高掛":"掛角";
+    return `進${HWQN[q]}角`;
+  }
+  return `${HWQN[q]}角的應對`;   /* 角上已經有雙方的子：不硬套術語 */
+}
+/* 一條手順每一手的說法；盤面的布局名稱變了（前 8 手內）就加上「走成○○」 */
+function hwTexts(path){
+  const out=[],toks=[];let pc=0;
+  path.forEach((m,k)=>{
+    let t=hwDesc(toks,m.c,m.p);
+    if(m.p)toks.push(m.c+m.p);
+    if(k<8){const r=hwNameC(toks);if(r&&r.c>pc){t+=`，走成${hwFmt(r.nm)}`;pc=r.c}}
+    out.push(t);
+  });
+  return out;
+}
+const hwPct=p=>p==null?"—":p>=.995?"100%":p<.005?"<1%":Math.round(p*100)+"%";
+let HOW=null;
+function closeHow(){HOW=null;const d=document.getElementById("howDw");if(d)d.remove();document.removeEventListener("keydown",howEsc)}
+function howEsc(e){if(e.key==="Escape")closeHow()}
+/* ctx＝{e（卡片那一組）, N, items（所有對局）, all, toks（卡片畫的子，畫面上的方向）} */
+function openHow(ctx){
+  closeHow();
+  const N=ctx.N,ref=ctx.toks.slice().sort().join(""),sides=[];
+  for(const sc of ctx.all?[""]:["B","W"]){
+    const its=ctx.e.its.filter(it=>ctx.all||it.c===sc);if(!its.length)continue;
+    const pool=ctx.all?ctx.items:ctx.items.filter(it=>it.c===sc);
+    const g=new Map();
+    its.forEach(it=>{const sig=[];for(let k=1;k<=N;k++)sig.push(hwKey(it,k));const s=sig.join("/");let r=g.get(s);if(!r){r=[];g.set(s,r)}r.push(it)});
+    const grp=[...g.values()].sort((a,b)=>b.length-a.length);
+    const routes=grp.slice(0,12).map(r=>{
+      const rep=r[0],t=Math.max(0,hwT(rep,N,ref)),path=[];
+      for(let k=0;k<N;k++){const m=rep.get(k);path.push({c:m?m.c:(k%2?"W":"B"),p:m&&m.p?tPt(m.p,t):null})}
+      let prod=1;
+      const steps=path.map((mv,k)=>{
+        const st=hwNext(pool,path.slice(0,k)),i=st.opts.findIndex(o=>o.key===hwKey(rep,k+1)),o=st.opts[i];
+        const mine=ctx.all||mv.c===sc,pr=o&&st.tot?o.n/st.tot:null;
+        if(mine&&pr!=null)prod*=pr;
+        return{mv,mine,pr,rank:i+1};
+      });
+      const tx=hwTexts(path);steps.forEach((s,k)=>s.tx=tx[k]);
+      return{path,steps,prod,n:r.length,w:r.filter(x=>x.win===true).length,d:r.filter(x=>x.win!=null).length};
+    }).sort((a,b)=>b.prod-a.prod||b.n-a.n);
+    const nm=hwBest(routes[0].path);
+    sides.push({sc,pool,routes,more:grp.length-Math.min(grp.length,12),nRoute:grp.length,n:its.length,
+      w:its.filter(x=>x.win===true).length,d:its.filter(x=>x.win!=null).length,name:nm});
+  }
+  if(!sides.length)return;
+  HOW={...ctx,sides,map:{si:0,path:sides[0].routes[0].path.slice()}};
+  const d=document.createElement("div");d.id="howDw";d.className="hwov";document.body.appendChild(d);
+  document.addEventListener("keydown",howEsc);
+  d.onclick=ev=>{
+    const b=ev.target.closest("[data-hwx],[data-hwm],[data-hwo],[data-hwk],[data-hwback],[data-hwhome]");if(!b||!HOW)return;
+    const M=HOW.map;
+    if(b.dataset.hwx){closeHow();return}
+    if(b.dataset.hwm){const[si,ri]=b.dataset.hwm.split(":").map(Number);HOW.map={si,path:HOW.sides[si].routes[ri].path.slice()};drawHow(true);return}
+    if(b.dataset.hwo!=null){const o=HOW.mapOpts[+b.dataset.hwo];if(o)M.path=M.path.concat([{c:o.c,p:o.p}]);drawHow(true);return}
+    if(b.dataset.hwk!=null){M.path=M.path.slice(0,+b.dataset.hwk);drawHow(true);return}
+    if(b.dataset.hwback){M.path=M.path.slice(0,-1);drawHow(true);return}
+    if(b.dataset.hwhome){M.path=[];drawHow(true);return}
+  };
+  drawHow(false);
+  const p=d.querySelector(".hwp");if(p)p.focus();
+}
+function drawHow(toMap){
+  const d=document.getElementById("howDw");if(!d||!HOW)return;
+  const H=HOW,all=H.all,cn=c=>c==="B"?"黑":"白";
+  const whoL=(sc,c)=>all?"":c===sc?"他":"對手";
+  const rec=(w,dd)=>dd?`${all?"黑":"他"} ${w} 勝 ${dd-w} 敗`:"";
+  let h="";
+  H.sides.forEach((s,si)=>{
+    h+=`<section class="hws"><div class="hwsd">${all?"全部棋譜":`${who()} 執${cn(s.sc)}`}</div>
+      <h3>${s.name?esc(hwFmt(s.name)):`前 ${H.N} 手的配置`}${s.name?` <span class="sub">（布局名稱）</span>`:""}</h3>
+      <p>這個配置 ${s.n} 局${s.d?`，${rec(s.w,s.d)}`:""}</p>
+      <p class="sub">${s.nRoute>1?`有 ${s.nRoute} 條路線（手順）走得到這裡，`:"只有 1 條路線（手順）走到這裡，"}${all?"每一手的比例＝同一個盤面底下，所有對局下這一手的比例；路線照每一手的比例相乘排。":"他的手寫的是同一個盤面底下他下這一手的比例（他執"+cn(s.sc)+"的所有對局），路線照他每一手的比例相乘排；對手的手照路線下。"}</p>`;
+    s.routes.forEach((r,ri)=>{
+      h+=`<div class="hwr"><div class="hwrh"><b>路線 ${ri+1}</b>　${all?"照這樣走":"他照這樣走"} <b class="num">${hwPct(r.prod)}</b><span class="sub num">${r.n} 局${r.d?` · ${r.w} 勝 ${r.d-r.w} 敗`:""}</span></div>
+        ${r.steps.map((st,k)=>`<div class="hwst${st.mine&&!all?" me":""}"><span class="hww">${whoL(s.sc,st.mv.c)}</span><span>${cn(st.mv.c)} ${k+1}　${esc(st.tx)} <span class="sub num">${coordName(st.mv.p,19)}</span></span><span class="num">${st.mine?`${hwPct(st.pr)}${st.rank>0?` <span class="hwrk">第 ${st.rank} 高</span>`:""}`:""}</span></div>`).join("")}
+        <button class="pbtn" data-hwm="${si}:${ri}">在下面的地圖看這條路 →</button></div>`;
+    });
+    if(s.more)h+=`<p class="sub">另有 ${s.more} 條路線，局數比較少，沒有列出。</p>`;
+    h+=`</section>`;
+  });
+  /* 地圖：從第 1 手點下去 */
+  const M=H.map,s=H.sides[M.si],st=hwNext(s.pool,M.path),k=M.path.length;
+  const opts=st.opts.slice(0,MKL.length);H.mapOpts=opts;
+  const nextC=opts.length?opts[0].c:(k%2?"W":"B"),mine=all||nextC===s.sc;
+  const toks=M.path.filter(m=>m.p).map(m=>m.c+m.p),tx=hwTexts(M.path),nm=hwBest(M.path);
+  const pg={sz:19,setup:[],len:k,moves:M.path.map(m=>({p:m.p,c:m.c}))};
+  const marks=opts.map((o,i)=>({p:o.p,c:o.c,txt:MKL[i],attr:"hwo",val:i,top:i===0,lab:`${MKL[i]}：${cn(o.c)} ${k+1} ${hwDesc(toks,o.c,o.p)}，${o.n} 局`}));
+  h+=`<section class="hws" id="hwMap"><div class="hwsd">地圖（從第 1 手點下去）${all?"":` · ${who()} 執${cn(s.sc)}`}</div>
+    <div class="hwctl"><button class="btn-link" data-hwback="1"${k?"":" disabled"}>上一步</button><button class="btn-link" data-hwhome="1"${k?"":" disabled"}>從頭</button></div>
+    <div class="hwbd">${boardSVG(pg,k,{numbers:true,marks})}</div>
+    ${opts.length?`<p class="sub" style="margin:4px 0 8px">盤上的 A、B、C… 是下一手的選項（A 最常下），點一下就往下走</p>`:""}
+    ${k?`<div class="hwpath">${M.path.map((m,i)=>`<button class="pbtn" data-hwk="${i+1}">${whoL(s.sc,m.c)?whoL(s.sc,m.c)+" ":""}${cn(m.c)} ${i+1}　${esc(tx[i])}</button>`).join("")}</div>`:""}
+    <div class="hwnode">${k?`走到第 ${k} 手的盤面${nm?`（${esc(hwFmt(nm))}）`:""}：`:"開始："}<b class="num">${st.n}</b> 局${st.d?`，${rec(st.w,st.d)}`:""}</div>
+    ${opts.length?`<div class="hwsd" style="margin-top:8px">第 ${k+1} 手：${all?"下哪裡（同一個盤面底下的比例）":mine?"他下哪裡（同一個盤面底下的比例）":"對手下過的選擇（只列局數）"}</div>
+      <div class="list">${opts.map((o,i)=>`<button class="row hwopt" data-hwo="${i}"><b class="num" style="color:var(--accent)">${MKL[i]}</b><span class="ell">${cn(o.c)} ${k+1}　${esc(hwDesc(toks,o.c,o.p))} <span class="sub num">${coordName(o.p,19)}</span></span><span class="num">${mine?`${hwPct(o.n/(st.tot||1))}（${o.n} 局）`:`${o.n} 局`}</span><span class="num ${o.d?o.w/o.d>=.5?"res-w":"res-l":"sub"}">${o.d?`${all?"黑勝":"勝率"} ${Math.round(o.w/o.d*100)}%`:"—"}</span></button>`).join("")}</div>
+      ${st.opts.length>opts.length?`<p class="sub">另有 ${st.opts.length-opts.length} 種下法沒有列出。</p>`:""}`
+      :`<p class="sub">${st.n?"之後沒有資料了（布局索引只收前 50 手，或棋局在這裡結束）。":"沒有對局走到這個盤面。"}</p>`}
+  </section>`;
+  const body=d.querySelector("#hwBody"),y=body?body.scrollTop:0;
+  d.innerHTML=`<div class="hwbk" data-hwx="1"></div><aside class="hwp" role="dialog" aria-modal="true" aria-label="如何下成此配置" tabindex="-1"><div class="hwh"><b>如何下成此配置</b><button class="btn-link" data-hwx="1">關閉</button></div><div class="hwb" id="hwBody">${h}</div></aside>`;
+  const nb=d.querySelector("#hwBody");
+  if(toMap){const mp=d.querySelector("#hwMap");if(mp)nb.scrollTop=mp.offsetTop-8;else nb.scrollTop=y}
 }
 /* ---------- 近期對局 ---------- */
 const opId=o=>o.sz+":"+o.key;
