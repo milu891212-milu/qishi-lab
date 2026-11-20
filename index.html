@@ -999,7 +999,7 @@ const S={page:"ov",subject:"",col:"all",per:"n0",from:"",to:"",fuTab:"op",fuSel:
   seP:"",sePC:"any",seOpp:"",seFrom:"",seTo:"",
   rdMode:"abs",rdBand:true,refAvg:true,refT10:true,refTop:true,rkMet:"Rt",rkMin:20,rkMore:50,rkJump:false,ovReg:[],cpA:"",cpB:"",cpFill:"B",
   /* 常用布局（卡片）與常用定石 */
-  fuSort:"n",fuSortSaved:"n",opMin:1,opMore:12,opGame:null,opLv:4,rcF:null,opSrc:"me",opChain:[],opSel:"",opSelLv:0,opRow:null,
+  fuSort:"n",fuSortSaved:"n",opMin:2,opMore:12,opGame:null,opLv:4,rcF:null,opSrc:"me",opChain:[],opSel:"",opSelLv:0,opRow:null,
   jsSrc:"me",jsRole:"all",jsK:4,jsSort:"n",jsPath:"",jsNb:"",jsSel:null,jsStep:null,jsMore:12,jsThumbs:12,
   jsOri:"norm",jsCorner:1,jsBoard:"full",jsOth:false,jsCfgMore:8,jsCfgSort:"n",jsNote:"",jsLv:2,jsCt:"all",jsFollow:false};
 const LSK="go-lab-v2";
@@ -2596,8 +2596,10 @@ function renderOP(el,L){
   const short=same?0:base.length-fs.reduce((a,e)=>a+e.n,0);
   let hidden="";
   /* 全部棋譜的 10、20 手幾乎每局都不一樣：一開始不列只出現 1 次的（接在某個布局之後時全部列出，等於是那些實戰的清單） */
-  if(all&&N>=10&&!follow){const one=fs.filter(e=>e.n<2).length;if(one&&one<fs.length){fs=fs.filter(e=>e.n>=2);hidden=`另有 ${one.toLocaleString()} 種只出現 1 次（沒有列出；先選一個 4 手或 10 手的布局，就會列出接在它後面的每一局）。`}}
-  if(srt!=="n")fs=fs.filter(e=>e.d>0&&e.n>=S.opMin);
+  if(all&&N>=10&&!follow&&S.opMin<2){const one=fs.filter(e=>e.n<2).length;if(one&&one<fs.length){fs=fs.filter(e=>e.n>=2);hidden=`另有 ${one.toLocaleString()} 種只出現 1 次（沒有列出；先選一個 4 手或 10 手的布局，就會列出接在它後面的每一局）。`}}
+  /* 「至少幾局」：每一種排序都適用（預設 2 局＝有重複出現才算），勝率排序另外要有勝負資料 */
+  {const few=fs.filter(e=>e.n<S.opMin).length;fs=fs.filter(e=>e.n>=S.opMin&&(srt==="n"||e.d>0));
+   if(few&&!hidden&&fs.length)hidden=`另有 ${few.toLocaleString()} 種不到 ${S.opMin} 局（沒有列出；「至少」改成 1 局就會全部列出）。`}
   const wr=e=>e.d?e.w/e.d*100:null;
   if(srt==="hi")fs.sort((a,b)=>wr(b)-wr(a)||b.n-a.n);
   else if(srt==="lo")fs.sort((a,b)=>wr(a)-wr(b)||b.n-a.n);
@@ -2636,13 +2638,13 @@ function renderOP(el,L){
     <span class="segw"><span class="seglab">資料</span>${segHTML("opSrc",S.opSrc,[["me",who()],["all",MODE==="data"?"全部棋譜":"全部載入的棋譜"]])}</span>
     <span class="segw"><span class="seglab">檢索</span>${auto?`<span class="sub">${same?"之後沒有分歧":`自動找分歧：第 ${N} 手開始不一樣`}</span>`:segHTML("opLv",N,OPLV.filter(v=>!follow||v>lastLv).map(v=>[v,`雙方前 ${v} 手`]))}</span>
     <span class="segw"><span class="seglab">排序</span>${segHTML("opSort",srt,[["n","最常下"],["hi","勝率高"],["lo","勝率低"]])}</span>
-    ${srt!=="n"?`<label class="sub">至少 <select id="opMin" class="numsel">${[1,2,3,5].map(v=>`<option value="${v}"${S.opMin===v?" selected":""}>${v} 局</option>`).join("")}</select></label>`:""}
+    <label class="sub">至少 <select id="opMin" class="numsel">${[1,2,3,5].map(v=>`<option value="${v}"${S.opMin===v?" selected":""}>${v} 局</option>`).join("")}</select></label>
   </div>
   ${follow?`<div class="jfollow"><span class="oicon">${miniSVG(seqStones(followTxt),{icon:true,label:"目前的布局"})}</span><span>接在目前的布局（前 ${lastLv} 手，${base.length} 局）之後，${same?`這 ${base.length} 局到第 ${OPMAX} 手（或棋局結束）都一樣，下面直接列出`:auto?`第 ${N} 手開始分歧，依前 ${N} 手分組`:`列出前 ${N} 手的變化`}</span><button class="btn-link" id="opBack">← 上一層</button><button class="btn-link" id="opUnf">✕ 不限目前的布局</button></div>`:""}
   <p class="jnote" style="margin:0 0 8px">同一個全盤配置算同一種（手順不同也合併，數字是最常見的手順）· 方向一律黑第一手在右上，並照實戰最常見的擺法（黑子在右邊、白子在左上）· 勝率＝${winLab}${short>0?` · ${short} 局不到 ${N} 手，沒有算進來`:""}。點一張卡片＝下方列出那個布局的實戰，上面換成接在它後面的${N<10?"前 10 手":"下一個分歧點（自動找出幾局開始不一樣的那一手）"}；只有 1 局的卡片直接顯示那一局。</p>
   ${hidden?`<p class="jnote" style="margin:0 0 8px">${esc(hidden)}</p>`:""}
   ${fs.length?`<div class="ocards">${show.map(card).join("")}</div>${fs.length>show.length?`<button class="more" id="opMore">顯示更多（還有 ${fs.length-show.length} 種）</button>`:""}`
-    :`<p class="sub">這個條件下沒有符合的布局${srt!=="n"?"，可以把「至少」的局數調低":""}。</p>`}
+    :same?"":`<p class="sub">${follow&&auto?`接下來的變化都不到 ${S.opMin} 局，下方列出這 ${base.length} 局；「至少」改成 1 局就會分開列出每一種。`:`這個條件下沒有符合的布局，可以把「至少」的局數調低。`}</p>`}
   </section>`;
   /* 選到的布局的實戰 */
   let vg=null,selRow=null,selG=null;
@@ -2674,7 +2676,7 @@ function renderOP(el,L){
   el.querySelectorAll("#opSrc button").forEach(b=>b.onclick=()=>{S.opSrc=b.dataset.v;S.opChain=[];S.opSel="";S.opSelLv=0;S.opLv=4;S.opMore=12;S.fuStep=null;rr()});
   el.querySelectorAll("#opLv button").forEach(b=>b.onclick=()=>{S.opLv=+b.dataset.v;S.opMore=12;rr()});
   el.querySelectorAll("#opSort button").forEach(b=>b.onclick=()=>{S.fuSort=S.fuSortSaved=b.dataset.v;S.opMore=12;saveLS();rr()});
-  const om=document.getElementById("opMin");if(om)om.onchange=e=>{S.opMin=+e.target.value;rr()};
+  const om=document.getElementById("opMin");if(om)om.onchange=e=>{S.opMin=+e.target.value;S.opMore=12;rr()};
   const mb=document.getElementById("opMore");if(mb)mb.onclick=()=>{S.opMore+=12;rr()};
   const uf=document.getElementById("opUnf");if(uf)uf.onclick=()=>{S.opChain=[];S.opSel="";S.opSelLv=0;S.opLv=4;S.opMore=12;rr()};
   /* 上一層：拿掉最後點的那一段，並在那一層把剛剛點的卡片標成選取 */
