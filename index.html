@@ -638,6 +638,10 @@ table.rk tr.me td{color:var(--accent-ink)}
 .fu-ctl label{display:inline-flex;align-items:center;gap:6px}
 .fu-sec{margin:18px 0 10px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
 .fu-sec p{margin:0;font-size:12px;color:var(--muted)}
+.hwlow{font-size:11px;color:var(--warn);background:var(--warn-bg);border-radius:4px;padding:0 5px;font-weight:600;white-space:nowrap}
+.hwalt{margin-top:8px;font-size:13px}
+.hwalt ul{margin:4px 0;padding-left:18px}
+.hwalt li{margin:2px 0}
 .hwmeta{font-size:13px;color:var(--muted)}
 .hwsum{font-size:14.5px;line-height:1.6;background:var(--accent-bg);color:var(--accent-ink);border-radius:8px;padding:8px 10px}
 .hwr{display:grid;grid-template-columns:104px minmax(0,1fr);gap:10px;align-items:start}
@@ -2676,7 +2680,7 @@ function renderOP(el,L){
       ${miniSVG(seqStones(repSeq(e)),{nums:true,label:`前 ${N} 手的布局`})}
       <div class="oc-s"><span class="num ${all?"":pctCls(w)}">${w==null?winLab+" —":(all?"黑勝 ":"勝率 ")+Math.round(w)+"%"}</span><span class="sub num">${e.w} 勝 ${e.d-e.w} 敗</span></div>
       <div class="meter"><i style="width:${w||0}%;background:${w==null?"var(--faint)":all?"var(--accent)":w>=50?"var(--good)":"var(--bad)"}"></i></div>
-      ${fitE(e).size>1?`<div class="sub">手順 ${fitE(e).size} 種（同形合併）</div>`:""}</button><button class="hwbtn" data-how="${e.key}">如何下成此配置</button></div>`};
+      ${fitE(e).size>1?`<div class="sub">手順 ${fitE(e).size} 種（同形合併）</div>`:""}</button><button class="hwbtn" data-how="${e.key}">${all?"最常見的走法":"如何下成此配置"}</button></div>`};
   let h=`<section class="panel"><div class="panel-h"><h2>布局研究</h2><p>${all?"全部棋譜":`${who()} 的對局（${S.col==="all"?"執黑、執白":S.col==="B"?"僅執黑":"僅執白"}）`} · ${items.length.toLocaleString()} 局</p></div>
   ${fuTabs()}
   <div class="fu-ctl">
@@ -2737,7 +2741,7 @@ function renderOP(el,L){
   /* 卡片下方的「如何下成此配置」：右邊滑出路線說明（卡片畫的方向） */
   el.querySelectorAll("[data-how]").forEach(b=>b.onclick=()=>{const e=m.get(b.dataset.how);if(!e)return;
     const q=repSeq(e),toks=[];for(let i=0;i+2<q.length;i+=3)toks.push(q.substr(i,3));
-    b.disabled=true;b.textContent="計算中…";setTimeout(()=>{openHow({e,N,items,all,toks});b.disabled=false;b.textContent="如何下成此配置"},20)});
+    const lab=b.textContent;b.disabled=true;b.textContent="計算中…";setTimeout(()=>{openHow({e,N,items,all,toks});b.disabled=false;b.textContent=lab},20)});
   el.querySelectorAll("[data-og]").forEach(b=>b.onclick=()=>{S.opGame=+b.dataset.og;S.fuStep=null;rr()});
   el.querySelectorAll("[data-opr]").forEach(b=>b.onclick=()=>{const it=items[+b.dataset.opr];S.opRow=it?it.r:null;S.fuStep=null;rr()});
   if(vg){
@@ -2861,11 +2865,12 @@ function openHow(ctx){
         const st=hwNext(pool,path.slice(0,k)),i=st.opts.findIndex(o=>o.key===hwKey(rep,k+1)),o=st.opts[i];
         const mine=ctx.all||mv.c===sc,pr=o&&st.tot?o.n/st.tot:null;
         if(mine&&pr!=null)prod*=pr;
-        return{mv,mine,pr,rank:i+1};
+        return{mv,mine,pr,rank:i+1,cnt:o?o.n:0,tot:st.tot};
       });
       const tx=hwTexts(path);steps.forEach((s,k)=>s.tx=tx[k]);
-      return{path,steps,prod,n:r.length,w:r.filter(x=>x.win===true).length,d:r.filter(x=>x.win!=null).length};
-    }).sort((a,b)=>b.prod-a.prod||b.n-a.n);
+      const keys=[];for(let k=1;k<=N;k++)keys.push(hwKey(rep,k));
+      return{path,steps,keys,prod,n:r.length,w:r.filter(x=>x.win===true).length,d:r.filter(x=>x.win!=null).length};
+    }).sort((a,b)=>b.n-a.n||b.prod-a.prod);   /* 最常見的手順排第一 */
     const nm=hwBest(routes[0].path);
     sides.push({sc,pool,routes,more:grp.length-Math.min(grp.length,12),nRoute:grp.length,n:its.length,
       w:its.filter(x=>x.win===true).length,d:its.filter(x=>x.win!=null).length,name:nm});
@@ -2887,56 +2892,63 @@ function openHow(ctx){
   drawHow(false);
   const p=d.querySelector(".hwp");if(p)p.focus();
 }
-/* 面板：①一句結論 ②路線小卡（小棋盤＋一排短標籤：對手的手粗體＝要你下的，他固定的手淡色，他不一定的手橘色標比例）
-   ③接下來他怎麼下（從這個配置一手一手點下去）④比例怎麼算（收起來） */
-const HW_FIX=.995;
-/* 一條路線的標籤：連續在同一個角應對的手合成一個（例如「右上角 7–12 手」） */
+/* 面板：①一句結論 ②最常見的手順（小棋盤＋一排短標籤：對手的手粗體＝要你下的，他每次都一樣的手淡色，他不一定的手橘色標「幾局／幾局」）
+   ＋其他手順縮成一行一條 ③接下來他怎麼下（從這個配置一手一手點下去）④怎麼算的（收起來）
+   局數少的時候比例不可靠：他的手一律寫「5/6 局」不寫百分比，不到 5 局標「樣本少」；不到 3 局不寫勝率 */
+const HW_LOW=5,HW_WMIN=3;
+const hwCnt=(a,b)=>`${a}/${b} 局`;
+const hwLow=`<span class="hwlow">樣本少</span>`;
+/* 標籤：連續在同一個角應對的手合成一個（例如「右上角 7–12 手」） */
 function hwChips(r,sc,all){
   const out=[];
   r.steps.forEach((st,k)=>{
-    const m=/^(.+)角的應對/.exec(st.tx),mine=all||st.mv.c===sc,unc=mine&&st.pr!=null&&st.pr<HW_FIX;
+    const m=/^(.+)角的應對/.exec(st.tx),mine=all||st.mv.c===sc,unc=!all&&mine&&st.tot&&st.cnt<st.tot;
     const last=out[out.length-1];
-    if(m&&last&&last.grp===m[1]){last.to=k+1;if(unc&&(last.pr==null||st.pr<last.pr))last.pr=st.pr;return}
-    out.push({grp:m?m[1]:null,from:k+1,to:k+1,c:st.mv.c,mine,pr:unc?st.pr:null,
-      tx:m?null:st.tx.replace(/，走成.*$/,""),apr:st.pr,tip:`${st.mv.c==="B"?"黑":"白"} ${k+1} ${st.tx} ${coordName(st.mv.p,19)}${mine&&st.pr!=null?` · ${hwPct(st.pr)}`:""}`});
+    if(m&&last&&last.grp===m[1]){last.to=k+1;if(unc&&(!last.unc||st.cnt/st.tot<last.cnt/last.tot))Object.assign(last,{unc:true,cnt:st.cnt,tot:st.tot});return}
+    out.push({grp:m?m[1]:null,from:k+1,to:k+1,c:st.mv.c,mine,unc,cnt:st.cnt,tot:st.tot,pr:st.pr,
+      tx:m?null:st.tx.replace(/，走成.*$/,""),tip:`${st.mv.c==="B"?"黑":"白"} ${k+1} ${st.tx} ${coordName(st.mv.p,19)}${mine&&st.tot?(all?` · ${hwPct(st.pr)}`:` · ${hwCnt(st.cnt,st.tot)}`):""}`});
   });
   return out.map(c=>{
-    const cls=all?"neu":c.pr!=null?"unc":c.mine?"fix":"opp";
+    const cls=all?"neu":c.unc?"unc":c.mine?"fix":"opp";
     const lab=c.grp?`${c.grp}角 ${c.from}${c.to>c.from?"–"+c.to:""} 手`:`${c.c==="B"?"黑":"白"}${c.from} ${c.tx}`;
-    return `<span class="hwc ${cls}" title="${esc(c.tip)}">${esc(lab)}${c.pr!=null?` <b class="num">${hwPct(c.pr)}</b>`:all&&c.apr!=null&&!c.grp?` <span class="num">${hwPct(c.apr)}</span>`:""}</span>`;
+    const val=all?(c.grp||c.pr==null?"":` <span class="num">${hwPct(c.pr)}</span>`):c.unc?` <b class="num">${hwCnt(c.cnt,c.tot)}</b>`:"";
+    return `<span class="hwc ${cls}" title="${esc(c.tip)}">${esc(lab)}${val}</span>`;
   }).join('<span class="hwar" aria-hidden="true">→</span>');
 }
-/* 結論：用最常走的那條路線（第一條）看他哪幾手不固定 */
+/* 結論：看最常見的手順裡他的手 */
 function hwSum(s,all){
   const r=s.routes[0];
-  if(all)return `最常見的走法是路線 1（${r.n} 局）。`;
-  const unc=r.steps.map((st,k)=>({st,k})).filter(x=>x.st.mine&&x.st.pr!=null&&x.st.pr<HW_FIX);
-  const lead=s.nRoute>1?`對手照下面任一條路線下，`:`對手照下面的路線下，`;
-  if(!unc.length)return `${lead}<b>他每一手都固定</b>，一定會走到這裡。`;
-  return `${lead}他大致會配合；不固定的是 ${unc.map(x=>`第 ${x.k+1} 手${esc(x.st.tx.replace(/，走成.*$/,""))}（<b>${hwPct(x.st.pr)}</b>）`).join("、")}。`;
+  if(all)return `全部棋譜裡，走到這個配置最常見的手順（${r.n} 局）。`;
+  const my=r.steps.map((st,k)=>({st,k})).filter(x=>x.st.mine&&x.st.tot);
+  const unc=my.filter(x=>x.st.cnt<x.st.tot),minT=my.length?Math.min(...my.map(x=>x.st.tot)):0;
+  const low=minT&&minT<HW_LOW?` ${hwLow} 他有一手只遇過 ${minT} 局，參考就好。`:"";
+  if(!unc.length)return `對手照下面這樣下，<b>他每一次都這樣應</b>，會走到這個配置。${low}`;
+  return `對手照下面這樣下，他大多會配合；不一定的是 ${unc.map(x=>`第 ${x.k+1} 手${esc(x.st.tx.replace(/，走成.*$/,""))}（<b>${hwCnt(x.st.cnt,x.st.tot)}</b>）`).join("、")}。${low}`;
 }
 function drawHow(toMap){
   const d=document.getElementById("howDw");if(!d||!HOW)return;
-  const H=HOW,all=H.all,cn=c=>c==="B"?"黑":"白";
+  const H=HOW,all=H.all,cn=c=>c==="B"?"黑":"白",ttl=all?"最常見的走法":"如何下成此配置";
   const rec=(w,dd)=>dd?`${all?"黑":"他"} ${w} 勝 ${dd-w} 敗`:"";
-  const SHOW=4;
   let h="";
   H.sides.forEach((s,si)=>{
+    const r=s.routes[0];
+    const stones=[];r.path.forEach((m,k)=>{if(m.p){const[x,y]=xy(m.p);stones.push({x,y,c:m.c,n:k+1})}});
+    /* 其他手順：寫出從第幾手開始和最常見的不一樣 */
+    const alts=s.routes.slice(1,5).map(a=>{let k=a.keys.findIndex((q,i)=>q!==r.keys[i]);if(k<0)k=0;const st=a.steps[k];
+      return `<li>第 ${k+1} 手起不同：${cn(st.mv.c)}${k+1} ${esc(st.tx.replace(/，走成.*$/,""))} <span class="sub num">${coordName(st.mv.p,19)}</span>　<span class="sub">${a.n} 局</span></li>`});
+    const restN=s.nRoute-Math.min(s.nRoute,5);
     h+=`<section class="hws"><div class="hwsd">${all?"全部棋譜":`${who()} 執${cn(s.sc)}`}</div>
       <h3>${s.name?esc(hwFmt(s.name)):`前 ${H.N} 手的配置`}</h3>
-      <p class="hwmeta">${s.n} 局${s.d?` · ${rec(s.w,s.d)}`:""}${s.nRoute>1?` · ${s.nRoute} 條路線`:""}</p>
-      <p class="hwsum">${hwSum(s,all)}</p>`;
-    s.routes.slice(0,SHOW).forEach((r,ri)=>{
-      const stones=[];r.path.forEach((m,k)=>{if(m.p){const[x,y]=xy(m.p);stones.push({x,y,c:m.c,n:k+1})}});
-      h+=`<div class="hwr"><div class="hwrb">${miniSVG(stones,{nums:true,label:`路線 ${ri+1}`})}</div>
-        <div class="hwrt"><div class="hwrh"><b>路線 ${ri+1}</b><span class="sub num">${r.n} 局${r.d?` · ${r.w} 勝 ${r.d-r.w} 敗`:""}</span></div>
+      <p class="hwmeta">${s.n} 局${s.d?` · ${rec(s.w,s.d)}`:""}</p>
+      <p class="hwsum">${hwSum(s,all)}</p>
+      <div class="hwr"><div class="hwrb">${miniSVG(stones,{nums:true,label:"最常見的手順"})}</div>
+        <div class="hwrt"><div class="hwrh"><b>最常見的手順</b><span class="sub num">${r.n} 局</span></div>
         <div class="hwcs">${hwChips(r,s.sc,all)}</div>
-        <button class="pbtn" data-hwm="${si}:${ri}">接下來${all?"":"他"}怎麼下 ↓</button></div></div>`;
-    });
-    if(s.routes.length>SHOW||s.more)h+=`<p class="sub">另有 ${s.routes.length-Math.min(SHOW,s.routes.length)+s.more} 條路線，局數比較少，沒有列出。</p>`;
-    h+=`</section>`;
+        <button class="pbtn" data-hwm="${si}:0">接下來${all?"":"他"}怎麼下 ↓</button></div></div>
+      ${alts.length?`<div class="hwalt"><div class="sub">其他手順（最後是同一個配置）</div><ul>${alts.join("")}</ul>${restN?`<div class="sub">另有 ${restN} 種手順，局數比較少。</div>`:""}</div>`:""}
+    </section>`;
   });
-  /* 接下來：從選的路線（預設路線 1）的配置開始，一手一手點下去 */
+  /* 接下來：從這個配置開始，一手一手點下去 */
   const M=H.map,s=H.sides[M.si],st=hwNext(s.pool,M.path),k=M.path.length;
   const opts=st.opts.slice(0,MKL.length);H.mapOpts=opts;
   const nextC=opts.length?opts[0].c:(k%2?"W":"B"),mine=all||nextC===s.sc,atBase=k===M.base.length;
@@ -2944,22 +2956,23 @@ function drawHow(toMap){
   const pg={sz:19,setup:[],len:k,moves:M.path.map(m=>({p:m.p,c:m.c}))};
   const marks=opts.map((o,i)=>({p:o.p,c:o.c,txt:MKL[i],attr:"hwo",val:i,top:i===0,lab:`${MKL[i]}：${cn(o.c)} ${k+1} ${hwDesc(toks,o.c,o.p)}，${o.n} 局`}));
   const extra=M.path.slice(M.base.length);
+  const wTxt=o=>o.d>=HW_WMIN?`<span class="num ${o.w/o.d>=.5?"res-w":"res-l"}">${all?"黑勝":"勝"} ${Math.round(o.w/o.d*100)}%</span>`:`<span class="sub" title="不到 ${HW_WMIN} 局，不算勝率">—</span>`;
   h+=`<section class="hws" id="hwMap"><div class="hwsd">接下來${all?"":"他"}怎麼下${all?"":` · ${who()} 執${cn(s.sc)}`}</div>
     <p class="hwmeta">${atBase?`從這個配置（第 ${k} 手）開始`:`配置之後又走了：${extra.map((m,i)=>`${cn(m.c)}${M.base.length+i+1} ${esc(hwDesc(M.path.slice(0,M.base.length+i).filter(q=>q.p).map(q=>q.c+q.p),m.c,m.p))}`).join(" → ")}`} · ${st.n} 局${st.d?` · ${rec(st.w,st.d)}`:""}</p>
-    ${opts.length?`<div class="list">${opts.map((o,i)=>{const pr=o.n/(st.tot||1);return `<button class="row hwopt" data-hwo="${i}"><b class="num" style="color:var(--accent)">${MKL[i]}</b><span class="ell">${cn(o.c)}${k+1} ${esc(hwDesc(toks,o.c,o.p))} <span class="sub num">${coordName(o.p,19)}</span></span><span class="num">${mine?hwPct(pr):""}<span class="sub"> ${o.n} 局</span></span><span class="num ${o.d?o.w/o.d>=.5?"res-w":"res-l":"sub"}">${o.d?`${all?"黑勝":"勝"} ${Math.round(o.w/o.d*100)}%`:"—"}</span></button>`}).join("")}</div>
-      <p class="sub" style="margin:4px 0">${mine?(all?"比例＝同一個盤面底下下這一手的比例":"比例＝同一個盤面底下他下這一手的比例"):"這一手輪到對手，只列局數"}${st.opts.length>opts.length?`；另有 ${st.opts.length-opts.length} 種沒有列出`:""}。點一列（或盤上的字母）往下走。</p>`
+    ${opts.length?`<div class="list">${opts.map((o,i)=>`<button class="row hwopt" data-hwo="${i}"><b class="num" style="color:var(--accent)">${MKL[i]}</b><span class="ell">${cn(o.c)}${k+1} ${esc(hwDesc(toks,o.c,o.p))} <span class="sub num">${coordName(o.p,19)}</span></span><span class="num">${all?`${hwPct(o.n/(st.tot||1))}<span class="sub"> ${o.n} 局</span>`:mine?hwCnt(o.n,st.tot):`${o.n} 局`}</span>${wTxt(o)}</button>`).join("")}</div>
+      <p class="sub" style="margin:4px 0">${all?"百分比＝同一個盤面底下下這一手的比例":mine?`他在這個盤面遇過 ${st.tot} 次，每一種下過幾次${st.tot<HW_LOW?" "+hwLow:""}`:"這一手輪到對手，只列局數"}${st.opts.length>opts.length?`；另有 ${st.opts.length-opts.length} 種沒有列出`:""}。勝率不到 ${HW_WMIN} 局不算。點一列（或盤上的字母）往下走。</p>`
       :`<p class="sub">${st.n?"之後沒有資料了（布局索引只收前 50 手，或棋局在這裡結束）。":"沒有對局走到這個盤面。"}</p>`}
     <div class="hwctl"><button class="btn-link" data-hwback="1"${k>M.base.length?"":" disabled"}>上一步</button><button class="btn-link" data-hwhome="1"${atBase?" disabled":""}>回到這個配置</button></div>
     <div class="hwbd">${boardSVG(pg,k,{numbers:true,marks})}</div>
   </section>
-  <details class="hwinfo"><summary>ⓘ 比例怎麼算</summary>
-    <p>${all?"每一手的比例＝走到同一個盤面的所有對局裡，下這一手的比例。":`他的手的比例＝他執同一色的所有對局裡，走到同一個盤面時，他下這一手的比例；排第幾高也是在這些對局裡比。對手的手不算比例，只看局數。`}</p>
-    <p>同一個盤面＝棋子位置一樣（轉方向、翻面都算同一個），手順不同也算。路線＝走到這個配置的手順，每一手之後的盤面都一樣才算同一條。</p>
-    <p>標籤的顏色：<span class="hwc opp">粗體</span> 對手的手（你要下的）、<span class="hwc fix">淡色</span> 他固定會下的手、<span class="hwc unc">橘色</span> 他不一定會下的手（數字是比例）。同一個角連續的應對合成一個標籤，滑鼠移上去可以看每一手。</p>
-    <p>布局名稱用的是 kifuai 的 121 種開局定義，取前 8 手內最完整的那一個。</p>
+  <details class="hwinfo"><summary>ⓘ 怎麼算的</summary>
+    ${all?`<p>百分比＝走到同一個盤面的所有對局裡，下這一手的比例（全部職業棋士的流行程度，不是某個人的習慣）。</p>`
+      :`<p>他的手寫「下過幾次／遇過幾次」：他執同一色的所有對局裡，走到同一個盤面時，他下這一手幾次。遇過不到 ${HW_LOW} 次的標「樣本少」，看到「5/5 局」也不代表他一定這樣下。</p>
+    <p>標籤：<span class="hwc opp">粗體</span> 對手的手（你要下的）、<span class="hwc fix">淡色</span> 他每次都這樣下、<span class="hwc unc">橘色</span> 他不一定這樣下。同一個角連續的應對合成一個標籤，滑鼠移上去可以看每一手。</p>`}
+    <p>同一個盤面＝棋子位置一樣（轉方向、翻面都算），手順不同也算。勝率不到 ${HW_WMIN} 局不顯示。布局名稱用的是 kifuai 的 121 種開局定義，取前 8 手內最完整的那一個。</p>
   </details>`;
   const body=d.querySelector("#hwBody"),y=body?body.scrollTop:0;
-  d.innerHTML=`<div class="hwbk" data-hwx="1"></div><aside class="hwp" role="dialog" aria-modal="true" aria-label="如何下成此配置" tabindex="-1"><div class="hwh"><b>如何下成此配置</b><button class="btn-link" data-hwx="1">關閉</button></div><div class="hwb" id="hwBody">${h}</div></aside>`;
+  d.innerHTML=`<div class="hwbk" data-hwx="1"></div><aside class="hwp" role="dialog" aria-modal="true" aria-label="${ttl}" tabindex="-1"><div class="hwh"><b>${ttl}</b><button class="btn-link" data-hwx="1">關閉</button></div><div class="hwb" id="hwBody">${h}</div></aside>`;
   const nb=d.querySelector("#hwBody");
   if(toMap){const mp=d.querySelector("#hwMap");if(mp)nb.scrollTop=mp.offsetTop-8;else nb.scrollTop=y}
 }
