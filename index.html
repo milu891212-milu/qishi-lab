@@ -999,7 +999,7 @@ const S={page:"ov",subject:"",col:"all",per:"n0",from:"",to:"",fuTab:"op",fuSel:
   seP:"",sePC:"any",seOpp:"",seFrom:"",seTo:"",
   rdMode:"abs",rdBand:true,refAvg:true,refT10:true,refTop:true,rkMet:"Rt",rkMin:20,rkMore:50,rkJump:false,ovReg:[],cpA:"",cpB:"",cpFill:"B",
   /* 常用布局（卡片）與常用定石 */
-  fuSort:"n",fuSortSaved:"n",opMin:2,opMore:12,opGame:null,opLv:4,rcF:null,opSrc:"me",opChain:[],opSel:"",opSelLv:0,opRow:null,
+  fuSort:"n",fuSortSaved:"n",opMin:2,opMore:12,opGame:null,opLv:5,rcF:null,opSrc:"me",opChain:[],opSel:"",opSelLv:0,opRow:null,
   jsSrc:"me",jsRole:"all",jsK:4,jsSort:"n",jsPath:"",jsNb:"",jsSel:null,jsStep:null,jsMore:12,jsThumbs:12,
   jsOri:"norm",jsCorner:1,jsBoard:"full",jsOth:false,jsCfgMore:8,jsCfgSort:"n",jsNote:"",jsLv:2,jsCt:"all",jsFollow:false};
 const LSK="go-lab-v2";
@@ -2522,10 +2522,10 @@ function renderFU(){
 }
 
 /* ---------- 常用布局 ----------
-   布局檢索：雙方前 4／10／20 手的「全盤配置」。手順不同、配置一樣的算同一種（同形合併）；
+   布局檢索：雙方前 5／10 手（之後自動找分歧點）的「全盤配置」。手順不同、配置一樣的算同一種（同形合併）；
    方向一律黑第一手在右上（只在原樣與沿右上對角線翻兩種裡選）。點卡片＝走到那個布局，下一段只列出接在它後面的變化。
    另外保留「自己的子」：只看研究對象自己的前幾子（有布局名稱） */
-const OPLV=[4,10],OPMAX=50;
+const OPLV=[5,10],OPMAX=50;
 /* 前 10 手之後不用固定手數：從 from+1 手起一手一手比，找出這幾局第一次不一樣的那一手（分水嶺）。
    比的是全盤配置（同形合併，和卡片一樣）。到 OPMAX 手（布局索引只收前 50 手）或棋局結束都一樣就回傳 null */
 function opSplit(base,from){
@@ -2581,7 +2581,7 @@ function renderOP(el,L){
   let base=items.filter(it=>S.opChain.every(c=>{const k=opK(it,c.lv);return k&&k.key===c.key}));
   if(S.opChain.length&&!base.length){S.opChain=[];base=items}
   const follow=S.opChain.length>0,lastLv=follow?S.opChain[S.opChain.length-1].lv:0;
-  let N=OPLV.includes(S.opLv)?S.opLv:4,auto=false,same=false;
+  let N=OPLV.includes(S.opLv)?S.opLv:5,auto=false,same=false;
   /* 已經點過 10 手的卡片：自動找下一個分歧點 */
   if(follow&&lastLv>=10){auto=true;N=opSplit(base,lastLv);if(N==null){same=true;N=lastLv}}
   else if(follow&&N<=lastLv)N=OPLV.find(v=>v>lastLv)||10;
@@ -2596,7 +2596,7 @@ function renderOP(el,L){
   const short=same?0:base.length-fs.reduce((a,e)=>a+e.n,0);
   let hidden="";
   /* 全部棋譜的 10、20 手幾乎每局都不一樣：一開始不列只出現 1 次的（接在某個布局之後時全部列出，等於是那些實戰的清單） */
-  if(all&&N>=10&&!follow&&S.opMin<2){const one=fs.filter(e=>e.n<2).length;if(one&&one<fs.length){fs=fs.filter(e=>e.n>=2);hidden=`另有 ${one.toLocaleString()} 種只出現 1 次（沒有列出；先選一個 4 手或 10 手的布局，就會列出接在它後面的每一局）。`}}
+  if(all&&N>=10&&!follow&&S.opMin<2){const one=fs.filter(e=>e.n<2).length;if(one&&one<fs.length){fs=fs.filter(e=>e.n>=2);hidden=`另有 ${one.toLocaleString()} 種只出現 1 次（沒有列出；先選一個 5 手或 10 手的布局，就會列出接在它後面的每一局）。`}}
   /* 「至少幾局」：只用在第一層（預設 2 局＝有重複出現才算）；點進卡片之後範圍已經縮小，1 局的也列出。勝率排序另外要有勝負資料 */
   {const mn=follow?1:S.opMin,few=fs.filter(e=>e.n<mn).length;fs=fs.filter(e=>e.n>=mn&&(srt==="n"||e.d>0));
    if(few&&!hidden&&fs.length)hidden=`另有 ${few.toLocaleString()} 種不到 ${mn} 局（沒有列出；「至少」改成 1 局就會全部列出）。`}
@@ -2673,12 +2673,12 @@ function renderOP(el,L){
   el.innerHTML=h;
   bindFuTabs(el);
   const rr=()=>renderFU();
-  el.querySelectorAll("#opSrc button").forEach(b=>b.onclick=()=>{S.opSrc=b.dataset.v;S.opChain=[];S.opSel="";S.opSelLv=0;S.opLv=4;S.opMore=12;S.fuStep=null;rr()});
+  el.querySelectorAll("#opSrc button").forEach(b=>b.onclick=()=>{S.opSrc=b.dataset.v;S.opChain=[];S.opSel="";S.opSelLv=0;S.opLv=5;S.opMore=12;S.fuStep=null;rr()});
   el.querySelectorAll("#opLv button").forEach(b=>b.onclick=()=>{S.opLv=+b.dataset.v;S.opMore=12;rr()});
   el.querySelectorAll("#opSort button").forEach(b=>b.onclick=()=>{S.fuSort=S.fuSortSaved=b.dataset.v;S.opMore=12;saveLS();rr()});
   const om=document.getElementById("opMin");if(om)om.onchange=e=>{S.opMin=+e.target.value;S.opMore=12;rr()};
   const mb=document.getElementById("opMore");if(mb)mb.onclick=()=>{S.opMore+=12;rr()};
-  const uf=document.getElementById("opUnf");if(uf)uf.onclick=()=>{S.opChain=[];S.opSel="";S.opSelLv=0;S.opLv=4;S.opMore=12;rr()};
+  const uf=document.getElementById("opUnf");if(uf)uf.onclick=()=>{S.opChain=[];S.opSel="";S.opSelLv=0;S.opLv=5;S.opMore=12;rr()};
   /* 上一層：拿掉最後點的那一段，並在那一層把剛剛點的卡片標成選取 */
   const ob=document.getElementById("opBack");if(ob)ob.onclick=()=>{const p=S.opChain[S.opChain.length-1];S.opChain=S.opChain.slice(0,-1);
     S.opLv=p.lv<=10?p.lv:10;S.opSel=p.key;S.opSelLv=p.lv;S.opGame=null;S.opRow=null;S.fuStep=null;S.opMore=12;rr()};
