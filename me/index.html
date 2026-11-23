@@ -969,6 +969,7 @@ html.a4on body{overflow:hidden}
 /* ===== 限制版：只有總覽、對局檢討；不能換研究對象 ===== */
 #nav button:not([data-p="ov"]):not([data-p="md"]){display:none!important}
 #searchForm,#acct,#navAd{display:none!important}
+#regSeg button:not([data-r="TW"]){display:none!important}
 [data-goto-rk],[data-goto-dt],[data-goad],[data-ins]:not([data-ins^="ph:"]){display:none!important}
 .uplast{pointer-events:none;text-decoration:none!important}
 .mebar{max-width:1240px;margin:0 auto;padding:6px 16px 0;font-size:12.5px;color:var(--muted)}
@@ -7605,7 +7606,7 @@ document.getElementById("minSel").onchange=e=>{
 document.querySelectorAll("#regSeg button").forEach(b=>b.onclick=()=>{
   const k=b.dataset.r,a=regSel();
   /* 全部＝選択なし。地域はクリックで追加、もう一度押すと外れる。全部外すと「全部」に戻る */
-  S.ovReg=k==="all"?[]:(a.includes(k)?a.filter(x=>x!==k):a.concat([k]));
+  S.ovReg=["TW"];   /* 限制版：只和台灣棋士比 */
   S.rkMore=50;S.rkJump=false;saveLS();syncHeader();go(S.page);
 });
 document.getElementById("searchForm").addEventListener("submit",async e=>{
@@ -7960,7 +7961,7 @@ async function meInit(){
   }
   if(!ME.pkg||!ME.pkg.name||!Array.isArray(ME.pkg.recs)){msg.textContent="資料格式不對，請通知海峰棋院。";return}
   if(!ME.pkg.recs.length){msg.textContent=ME.pkg.name+"：目前還沒有你的 AI 分析棋譜。";return}
-  S.subject=ME.pkg.name;
+  S.subject=ME.pkg.name;S.ovReg=["TW"];   /* 比較對象固定台灣 */
   L.hidden=true;
   const bar=document.createElement("div");bar.className="mebar";
   bar.textContent=`${ME.pkg.name} 的 AI 分析 · 資料更新：${String(ME.pkg.gen||"").slice(0,10)} · 由海峰棋院提供，僅供本人參考`;
