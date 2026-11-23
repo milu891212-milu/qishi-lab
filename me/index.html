@@ -1089,9 +1089,12 @@ const THU=ph=>ph===2?" 目":"%",MU=m=>m.u==="目"?" 目":"%",thL=ph=>ph===2?`${C
 const BIG=m=>m.u==="目"?CFG.thE2:m.ph===2?CFG.th2:TH2(m.ph);   /* 這個失誤算不算大失誤 */
 const thTxt=ph=>ph===2?`目數 −${CFG.thE1} 目以上 ／ −${CFG.thE2} 目以上`:`勝率 −${TH1(ph)}% 以上 ／ −${TH2(ph)}% 以上`;
 /* 「大失著」用的門檻：設定裡的 10%（沒有 10% 時用第二個門檻） */
-/* 對局檢討上方「大失著」的門檻（各階段不同：布局 15%、中盤 25%、官子 25%；使用者 2026-11-23 指定）。
-   總覽、排行榜、分析報告的「大失著」仍是 K10（10%） */
+/* 「大失著」的門檻（各階段不同：布局 15%、中盤 25%、官子 25%；使用者 2026-11-23 指定）：
+   對局檢討、總覽、分析報告、A4 報告都用這個。排行榜和「與全棋士比較」的名次仍用 rank.json 的 10%（K10），和全體同一把尺 */
 const RVB=ph=>(Array.isArray(CFG.rvB)&&CFG.rvB[ph]>0?CFG.rvB[ph]:[15,25,25][ph]);
+const rvbTxt=()=>RVB(1)===RVB(2)?`布局 ${RVB(0)}%、中盤和官子 ${RVB(1)}%`:`布局 ${RVB(0)}%、中盤 ${RVB(1)}%、官子 ${RVB(2)}%`;
+/* 每局幾次大失著（ph 省略＝三個階段合計） */
+const bigPerGame=(L,ph)=>{if(!L.length)return null;let c=0;L.forEach(g=>{if(g.rbC)(ph==null?[0,1,2]:[ph]).forEach(p=>c+=g.rbC[p])});return c/L.length};
 const K10=()=>CFG.mt.indexOf(10)>=0?CFG.mt.indexOf(10):Math.min(1,CFG.mt.length-1);
 const phaseOf=n=>n<=CFG.p1?0:n<=CFG.p2?1:2;
 const PHR=()=>[`1–${CFG.p1} 手`,`${CFG.p1+1}–${CFG.p2} 手`,`${CFG.p2+1} 手以後`];
@@ -2039,10 +2042,10 @@ function renderOV(){
     <div class="kpi"><div class="l">勝率</div><div class="v num">${W.n?pct(W.w,W.n)+"%":"—"}</div><div class="s">${W.n?`<span class="num">${W.w}</span> 勝 <span class="num">${W.n-W.w}</span> 敗${n>W.n?`（${n-W.n} 局無結果）`:""} · `:""}${sub}</div></div>
     ${Q0.T1x!=null?`<div class="kpi"><div class="l">AI 一致度</div><div class="v num">${Q0.T1x.toFixed(1)}%</div><div class="s">下出 AI 首選的比例・已考慮對手強弱</div></div>`
       :`<div class="kpi"><div class="l">AI 吻合度</div><div class="v num">${sr1All==null?"—":Math.round(sr1All)+"%"}</div><div class="s">下出 AI 首選的比例（對手不在資料庫，無法考慮對手強弱）</div></div>`}
-    ${Q0.Wx!=null?`<div class="kpi"><div class="l">失著</div><div class="v num">${Q0.Wx.toFixed(2)}<span style="font-size:15px">% ／手</span></div><div class="s">勝負未定時每手掉的勝率（越少越好）・大失著 ${(mistPerGame(L,K10())||0).toFixed(2)} 次/局</div></div>`
-      :`<div class="kpi"><div class="l">大失著（勝率掉 ${CFG.mt[K10()]}% 以上）</div><div class="v num">${(mistPerGame(L,K10())||0).toFixed(2)}<span style="font-size:15px"> 次/局</span></div><div class="s">越少越好</div></div>`}
+    ${Q0.Wx!=null?`<div class="kpi"><div class="l">失著</div><div class="v num">${Q0.Wx.toFixed(2)}<span style="font-size:15px">% ／手</span></div><div class="s">勝負未定時每手掉的勝率（越少越好）・大失著 ${(bigPerGame(L)||0).toFixed(2)} 次/局</div></div>`
+      :`<div class="kpi"><div class="l">大失著</div><div class="v num">${(bigPerGame(L)||0).toFixed(2)}<span style="font-size:15px"> 次/局</span></div><div class="s">勝率掉 ${rvbTxt()} 以上・越少越好</div></div>`}
   </section>
-  <section class="panel"><div class="panel-h"><h2>各階段表現</h2><p>右上的評價＝考慮對手強弱後、同一階段全棋士中的位置 · 大失著＝勝率掉 ${CFG.mt[k10]}% 以上的著手 · 點一格進入那個階段的對局檢討</p></div><div class="phases">`;
+  <section class="panel"><div class="panel-h"><h2>各階段表現</h2><p>右上的評價＝考慮對手強弱後、同一階段全棋士中的位置 · 大失著＝勝率掉 ${rvbTxt()} 以上的著手 · 點一格進入那個階段的對局檢討</p></div><div class="phases">`;
   ps.forEach(p=>{
     const col=lab[p.p]==="good"?"var(--good)":lab[p.p]==="bad"?"var(--bad)":"var(--faint)";
     const ra=rankOf(["s3f","s3m","s3e"][p.p],p.sr3,S.rkMin),ra1=rankOf(["sf","sm","se"][p.p],p.sr1,S.rkMin),rq=phaseRank(ps,L,p.p),qOn=!!phaseQ(L),
@@ -2052,8 +2055,8 @@ function renderOV(){
         const rows=[];
         if(PQ0&&PQ0[PQID[p.p]]!=null)rows.push({dir:1,lab:"比平均棋士",w:rq?(1-rq.pct)*100:0,txt:qfMain(PQID[p.p],PQ0[PQID[p.p]],PQ0)+(p.p<2?"／局":"／手"),c:"var(--accent)"});
         else rows.push({dir:1,lab:"AI 吻合度",w:p.sr1||0,txt:p.sr1==null?"—":Math.round(p.sr1)+"%",c:"var(--accent)"});
-        const mx=Math.max(...ps.map(q=>q.mpg[k10]||0),0.001),v=p.mpg[k10];
-        rows.push({dir:-1,lab:"大失著",tip:`勝率掉 ${CFG.mt[k10]}% 以上的著手，每局幾次`,w:(v||0)/mx*100,txt:v==null?"—":v.toFixed(2)+" 次/局",c:col});
+        const mx=Math.max(...ps.map(q=>q.rb||0),0.001),v=p.rb;
+        rows.push({dir:-1,lab:"大失著",tip:`勝率掉 ${RVB(p.p)}% 以上的著手，每局幾次`,w:(v||0)/mx*100,txt:v==null?"—":v.toFixed(2)+" 次/局",c:col});
         return rows.map(r=>`<div class="mrow" title="${r.tip?r.tip+"・":""}${r.dir>0?"越高越強":"越低越強"}"><span>${r.lab}</span><div class="meter"><i style="width:${Math.max(0,Math.min(100,r.w))}%;background:${r.c}"></i></div><span class="num">${r.txt}</span></div>`).join("");
       })()}
       <span class="go">看${PH[p.p]}的對局檢討 →</span></button>`;
@@ -2065,7 +2068,7 @@ function renderOV(){
     const o=OPEN[g.f];
     h+=`<button class="row grow4" data-game="${g.id}"><span class="num">${fmtS(g.date)}</span>
     <span style="display:flex;gap:8px;align-items:center;min-width:0">${stoneI(g.c)}<span class="chip" style="background:${o?o.col:"var(--faint)"}"></span><span class="ell">vs ${esc(g.opp)}<br><span class="sub">${o?esc(o.label):""}${g.evt?" · "+esc(g.evt):""}</span></span></span>
-    <span class="sub num">${g.hasWR?`大失著 ${g.mtC[k10]?g.mtC[k10].reduce((a,b)=>a+b,0):0}`:""}</span><span class="${g.win===true?"res-w":g.win===false?"res-l":"sub"}">${esc(g.res)}</span></button>`;
+    <span class="sub num">${g.hasWR?`大失著 ${g.rbC?g.rbC.reduce((a,b)=>a+b,0):0}`:""}</span><span class="${g.win===true?"res-w":g.win===false?"res-l":"sub"}">${esc(g.res)}</span></button>`;
   });
   h+=`</div>${moreBtn(Math.min(S.ovMore,n),n,"ov")}</section>`;
   el.innerHTML=h;
@@ -2149,7 +2152,7 @@ function a4Sheet(){
     ["勝率",W.n?pct(W.w,W.n)+"%":"—",W.n?`${W.w} 勝 ${W.n-W.w} 敗${S.col==="all"&&bw.n&&ww.n?` · 執黑 ${pct(bw.w,bw.n)}%・執白 ${pct(ww.w,ww.n)}%`:""}`:"沒有勝負結果"],
     ["對手強弱",om==null?"—":String(Math.round(om)),om==null?(RANK?"對手在資料庫裡有 20 局以上的對局不到 5 局，算不出來":"排名資料沒有載入，算不出來"):`對手的平均等級分（${Math.abs(om-1500)<15?"和平均棋士相當":`比平均棋士${om>=1500?"高":"低"} ${Math.round(Math.abs(om-1500))}`}）`],
     ["AI 吻合度（最佳手）",CV.sa==null?"—":Math.round(CV.sa)+"%",`前三選 ${CV.s3a==null?"—":Math.round(CV.s3a)+"%"} · 未考慮對手強弱`],
-    [`勝率掉 ${CFG.mt[k10]}% 以上的著手`,noAI?"—":(mistPerGame(L,k10)||0).toFixed(2)+" 次/局",noAI?"沒有逐手的 AI 分析":"平均每局的次數"]];
+    ["大失著",noAI?"—":(bigPerGame(L)||0).toFixed(2)+" 次/局",noAI?"沒有逐手的 AI 分析":`勝率掉 ${rvbTxt()} 以上，平均每局的次數`]];
   /* 六項能力 */
   const DS={OPx:"第 1–50 手",MGx:"第 51–150 手",EGx:"差 15 目以內的收官",Wx:"勝負未定時的失誤",T1x:"下出 AI 首選",Rt:"只看輸贏",s3f:"第 1–50 手",s3m:"第 51–150 手",s3e:"151 手起",K10a:"勝負未定時",sa:"AI 首選",s3a:"AI 前三選"};
   const rows=AX.map(x=>{
@@ -2170,13 +2173,13 @@ function a4Sheet(){
   const rw=(RP["最近的趨勢"]||[]).find(x=>x.startsWith("勝率 "));
   let sw=(RP["強處與弱點"]||[]).filter(x=>!/^<b>(強處|弱點)：/.test(x)).concat(RP["建議加強的部分"]||[]);
   /* 「優先補強」的次數改用和表格相同的門檻；局數太少時不說「維持現狀即可」 */
-  sw=sw.map(x=>{const p=PH.findIndex(h=>x.startsWith(`優先補強<b>${h}</b>`));return p>=0&&ps[p].mpg[k10]!=null?`優先補強<b>${PH[p]}</b>。這個階段每局有 ${ps[p].mpg[k10].toFixed(2)} 次勝率掉 ${CFG.mt[k10]}% 以上的著手。`:x});
+  sw=sw.map(x=>{const p=PH.findIndex(h=>x.startsWith(`優先補強<b>${h}</b>`));return p>=0?`優先補強<b>${PH[p]}</b>。這個階段每局有 ${ps[p].rb.toFixed(2)} 次勝率掉 ${RVB(p)}% 以上的著手。`:x});
   if(n<10||sw.includes("資料不足以判斷強弱。"))sw=sw.filter(x=>!x.startsWith("目前沒有特別突出的弱點"));
   if(!RANK)sw=sw.map(x=>x==="資料不足以判斷強弱。"?"排名資料沒有載入，無法判斷強弱。":x);
   if(!sw.length)sw=["局數太少，不做建議。"];
   /* 各階段 */
   const ph=[0,1,2].map(p=>{const rq=phaseRank(ps,L,p),x=ps[p],q=PQ&&PQ[PQID[p]]!=null?qfMain(PQID[p],PQ[PQID[p]],PQ)+(p<2?"／局":"／手"):"—";
-    return `<tr><th scope="row">${PH[p]}${noAI?"":`<small class="a4ph ${lab[p]}">${LAB[lab[p]]}</small>`}</th><td class="nw">${rq?`<span class="num">${rq.rank} / ${rq.n}</span> ${a4T(TIER(rq.pct))}`:"—"}</td><td class="num nw">${q}</td><td class="num nw">${x.sr1==null?"—":Math.round(x.sr1)+"%"} / ${x.sr3==null?"—":Math.round(x.sr3)+"%"}</td><td class="num nw">${noAI||x.mpg[k10]==null?"—":x.mpg[k10].toFixed(2)}</td></tr>`}).join("");
+    return `<tr><th scope="row">${PH[p]}${noAI?"":`<small class="a4ph ${lab[p]}">${LAB[lab[p]]}</small>`}</th><td class="nw">${rq?`<span class="num">${rq.rank} / ${rq.n}</span> ${a4T(TIER(rq.pct))}`:"—"}</td><td class="num nw">${q}</td><td class="num nw">${x.sr1==null?"—":Math.round(x.sr1)+"%"} / ${x.sr3==null?"—":Math.round(x.sr3)+"%"}</td><td class="num nw">${noAI||noAI?"—":x.rb.toFixed(2)}</td></tr>`}).join("");
   return `<div class="a4s" lang="zh-Hant"><div class="a4in">
   <header class="a4hd"><div><p class="a4k">棋士能力報告</p><h1 class="a4nm">${esc(S.subject||"研究對象")}<span class="a4rg">${esc(rg)}</span></h1></div><div class="a4dt">製表日期 <span class="num">${today}</span><br>棋士研究室</div></header>
   <p class="a4sc"><b>資料範圍</b>　${n} 局${d0?`（<span class="num">${fmtD(d0)}</span> ～ <span class="num">${fmtD(d1)}</span>）`:""} · 期間：${esc(per)} · 執子：${S.col==="all"?"黑白合計":S.col==="B"?"只看執黑":"只看執白"} · 比較對象：${grp}${MODE==='data'?'':' · 資料來源：'+src}${n<20?" · <b>局數少，名次僅供參考</b>":""}${cav?`<br>${cav}`:""}</p>
@@ -2189,7 +2192,7 @@ function a4Sheet(){
   <table><thead><tr><th>項目</th><th>表現</th><th>平均棋士</th><th>前 10%</th><th>名次</th><th>位置</th><th>評價</th></tr></thead><tbody>${rows}</tbody></table></section>
   <section class="a4r"><h2>重要指標的走勢<small>${trOK?`舊 → 新 · 每一點＝到那一局為止最近 ${D.W} 局的成績 · 越上面越好`:""}</small></h2>${tr}</section>
   <div class="a4r a4c2b"><section><h2>各階段<small>名次＝同階段全棋士中${PQ?"（考慮對手強弱）":"（看前三選吻合度）"}</small></h2>
-  <table class="a4tph"><thead><tr><th>階段</th><th>名次・評價</th><th>比平均棋士</th><th>AI 吻合度<br>首選／前三選</th><th>掉 ${CFG.mt[k10]}% 以上<br>次/局</th></tr></thead><tbody>${ph}</tbody></table></section>
+  <table class="a4tph"><thead><tr><th>階段</th><th>名次・評價</th><th>比平均棋士</th><th>AI 吻合度<br>首選／前三選</th><th>大失著<br>次/局</th></tr></thead><tbody>${ph}</tbody></table></section>
   <section><h2>建議加強<small>依資料自動整理</small></h2>${sw.length?`<ul class="a4ul">${sw.map(x=>`<li>${x}</li>`).join("")}</ul>`:`<p class="a4na">—</p>`}</section></div>
   <footer class="a4ft"><b>數字怎麼算的</b>　${!RANK?"排名資料沒有載入，所以沒有名次與「平均棋士」「前 10%」的參考值。":qOn?"布局、中盤、官子、失著、AI 一致度：每一局都和同一局的對手比，再加上對手本身的水準（考慮對手強弱），碰到強的對手不會吃虧。等級分只看輸贏，贏了強的對手加得多（平均棋士＝1500）。":noAI?"這批棋譜沒有逐手的 AI 分析，也無法考慮對手強弱，只能看勝負。":"對手大多不在資料庫裡，無法考慮對手強弱，這裡用 AI 吻合度與失著次數。"}各階段的強項／弱點＝三個階段互相比較。評價：頂尖＝前 10%、優秀＝前 25%、中上＝前 50%、中下＝後 50%、偏弱＝後 25%。「平均棋士」「前 10%」是全期間 20 局以上全部棋士的數字。${MODE==="data"?"棋譜分析：KataGo 逐手分析（500 visits）。":""}</footer>
   </div></div>`;
@@ -2368,8 +2371,7 @@ function report(L,ps){
   const a=[];
   if(pc.every(x=>x!=null)){
     const bad=[0,1,2].sort((x,y)=>pc[y]-pc[x])[0];
-    const k=K10();
-    a.push(`優先補強<b>${PH[bad]}</b>。這個階段每局有 ${(ps[bad].mpg[k]||0).toFixed(2)} 次大失著（勝率掉 ${CFG.mt[k]}% 以上）。`+lnk(`逐手檢查${PH[bad]}的失著`,"ph:"+bad));
+    a.push(`優先補強<b>${PH[bad]}</b>。這個階段每局有 ${(ps[bad].rb||0).toFixed(2)} 次大失著（勝率掉 ${RVB(bad)}% 以上）。`+lnk(`逐手檢查${PH[bad]}的失著`,"ph:"+bad));
   }
   const losses=L.filter(g=>g.win===false),close=losses.filter(g=>g.margin!=null&&g.margin<=1.5);
   if(close.length>=2)a.push(`負局 ${losses.length} 局中 ${close.length} 局是 1.5 目以內——<b>官子的得失直接決定勝負</b>，值得優先練。`+lnk("查看官子棋譜","ph:2"));
@@ -2378,8 +2380,8 @@ function report(L,ps){
     const lo=[...fs].sort((x,y)=>x.w-y.w)[0];
     if(lo.w<45)a.push(`布局「${esc(lo.o.label)}」${lo.n} 局只有 ${lo.w}% 勝率，重新檢討這個下法或改用別的。`+lnk("看常用布局","fu:op"));
   }
-  const big=CFG.mt.indexOf(20)>=0?mistPerGame(L,CFG.mt.indexOf(20)):null;
-  if(big!=null&&big>=1.5)a.push(`每局平均 ${big.toFixed(2)} 次掉 20% 以上的大失著，數量偏多。先減少大崩比提升細部精度有效。`);
+  const big=bigPerGame(L);
+  if(big!=null&&big>=1.5)a.push(`每局平均 ${big.toFixed(2)} 次大失著（勝率掉 ${rvbTxt()} 以上），數量偏多。先減少大崩比提升細部精度有效。`);
   if(!a.length)a.push("目前沒有特別突出的弱點。維持現狀即可。");
   S5.push(["建議加強的部分",a]);
 
