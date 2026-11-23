@@ -1822,6 +1822,17 @@ function boardSVG(g,n,o={}){
   h+=`<rect x="${X(0)}" y="${X(0)}" width="${X(sz-1)-X(0)}" height="${X(sz-1)-X(0)}" fill="none" stroke="#2b1a04" stroke-opacity=".85" stroke-width="2"/>`;
   const hs=HOSHI(sz).filter(v=>Number.isInteger(v));
   hs.forEach(a=>hs.forEach(b=>h+=`<circle cx="${X(a)}" cy="${X(b)}" r="4.6" fill="#2b1a04" fill-opacity=".85"/>`));
+  /* 座標：上下是 A–T（沒有 I），左右是 19–1（和 coordName 一樣的寫法）；o.noCoords 可以關掉 */
+  if(!o.noCoords){
+    const ca=`text-anchor="middle" font-size="15" font-weight="500" font-family="IBM Plex Mono,monospace" fill="#2b1a04" fill-opacity=".78" aria-hidden="true"`;
+    let cs="";
+    for(let i=0;i<sz;i++){
+      const L=COLS[i]||"",Nm=String(sz-i);
+      cs+=`<text x="${X(i)}" y="15.5" ${ca}>${L}</text><text x="${X(i)}" y="${Sz-4.5}" ${ca}>${L}</text>`
+        +`<text x="12" y="${X(i)+5}" ${ca}>${Nm}</text><text x="${Sz-12}" y="${X(i)+5}" ${ca}>${Nm}</text>`;
+    }
+    h+=cs;
+  }
   const R=G*.475;
   let st="",tx="";
   for(let y=0;y<sz;y++)for(let x=0;x<sz;x++){
