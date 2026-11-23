@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>限制版管理</title>
+<meta name="robots" content="noindex">
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<style>
+:root{--bg:#F2F4F3;--surface:#fff;--ink:#1A2227;--muted:#5B6870;--line:#D6DEDD;--accent:#245E7F;--accent-bg:#E0EBF1;--good:#2F7A57;--bad:#B23A30;--warn:#9A5F15;--warn-bg:#F6EAD6}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121719;--surface:#1B2226;--ink:#E4EAEC;--muted:#9AA7AD;--line:#2E3A3F;--accent:#86B9D6;--accent-bg:#1C3342;--good:#6CC59A;--bad:#EE8A80;--warn:#E3B061;--warn-bg:#3A2E1A}}
+:root[data-theme="dark"]{--bg:#121719;--surface:#1B2226;--ink:#E4EAEC;--muted:#9AA7AD;--line:#2E3A3F;--accent:#86B9D6;--accent-bg:#1C3342;--good:#6CC59A;--bad:#EE8A80;--warn:#E3B061;--warn-bg:#3A2E1A}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:13px}
+section{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:14px 0}
+h2{font-size:17px;margin:0 0 8px}
+button{font:inherit;border:1px solid var(--accent);background:var(--accent-bg);color:var(--ink);border-radius:6px;padding:6px 14px;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+button.link{border:0;background:none;color:var(--accent);padding:0;font-size:13px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.msg{margin-top:8px;font-size:14px}
+.ok{color:var(--good)}.err{color:var(--bad)}
+.warn{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:8px 10px;font-size:13.5px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--muted)}
+td.num{font-variant-numeric:tabular-nums}
+.tbl{max-height:60vh;overflow:auto}
+code{font-size:12.5px;word-break:break-all}
+</style>
+</head><body><div class="wrap">
+<h1>限制版管理</h1>
+<p class="sub">給職協官網的「只看得到自己」版本（<a href="me/">me/</a>）：每位職協棋士一把專屬金鑰，網址是 <code>…/qishi-lab/me/#k=金鑰</code>。這一頁產生每位棋士的資料包、下載給官網的連結表。完整版不受影響。</p>
+<div id="gate" class="msg">連線中…</div>
+<div id="main" hidden>
+  <section>
+    <h2>1. 產生／更新資料包</h2>
+    <p class="sub">讀目前的資料庫和職協棋士名單（cpga.org.tw 的 players.json），為每位有對局的棋士產生資料包。<b>完整版上傳新棋譜之後，要回來按一次「更新全部」</b>，限制版才會看到新棋譜。已經有連結的棋士會沿用原本的金鑰（官網的連結不用改）。</p>
+    <div class="row"><button id="btnLoad">讀取資料庫與名單</button><button id="btnAll" disabled>更新全部資料包</button></div>
+    <div id="prog" class="msg"></div>
+  </section>
+  <section>
+    <h2>2. 給官網的連結表</h2>
+    <p class="sub">把下載的檔案交給官網同事匯入（說明在「官網串接說明」資料夾）。連結等同鑰匙，請不要公開貼出。</p>
+    <div class="row"><button id="btnCsv" disabled>下載連結表（CSV）</button><button id="btnSql" disabled>下載匯入用 SQL</button></div>
+  </section>
+  <section>
+    <h2>職協棋士</h2>
+    <div id="sum" class="sub"></div>
+    <div class="tbl"><table><thead><tr><th>棋士</th><th>資料庫局數</th><th>連結</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>
+  </section>
+</div>
+</div>
+<script>
+/* 和完整版同一個 Firebase 專案、同一個具名 app（同網站共用登入：在完整版用管理帳號登入過就不用再登入） */
+const FB_CONFIG={apiKey:"AIzaSyBtv2KrRUriwet6ToLXoVpYQziC5IBOTig",authDomain:"qishi-lab.firebaseapp.com",projectId:"qishi-lab",storageBucket:"qishi-lab.firebasestorage.app",messagingSenderId:"565824520374",appId:"1:565824520374:web:3b72fc5e8d4b92a2c92617"};
+const ADMIN_EMAILS=["haifongigo@gmail.com"];
+const PLAYERS_URL="https://cpga.org.tw/assets/data/players.json";
+const ME_URL=new URL("me/",location.href).href;
+const FS_CHUNK=900000;
+/* 對手強弱計算要用的欄位（完整版 qfVals 讀的 θ、等級分…），其他欄位不給 */
+const OPP_COLS=["θT1","θW","OPx","MGx","EGt","EGq","Rt"];
+const app=firebase.initializeApp(FB_CONFIG,"qishi-lab"),auth=app.auth(),db=app.firestore(),B=firebase.firestore.Blob;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let IDX=null,RANK=null,CPGA=[],KEYS={},SHARD=new Map();
+
+async function gz(str){return new Uint8Array(await new Response(new Blob([str]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer())}
+async function ungz(u8){return await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream("gzip"))).text()}
+async function readText(colName,name){
+  const col=db.collection(colName),d=await col.doc(name).get();
+  if(!d.exists)throw new Error("沒有 "+name);
+  const h=d.data(),n=h.n||1,parts=[h.z.toUint8Array()];
+  for(let i=1;i<n;i++){const c=await col.doc(name+"~"+i).get();if(!c.exists)throw new Error(name+" 缺一段");parts.push(c.data().z.toUint8Array())}
+  let len=0;parts.forEach(p=>len+=p.length);const all=new Uint8Array(len);let o=0;parts.forEach(p=>{all.set(p,o);o+=p.length});
+  return ungz(all);
+}
+async function writeText(colName,name,str){
+  const z=await gz(str),n=Math.max(1,Math.ceil(z.length/FS_CHUNK)),col=db.collection(colName);
+  for(let i=1;i<n;i++)await col.doc(name+"~"+i).set({z:B.fromUint8Array(z.subarray(i*FS_CHUNK,(i+1)*FS_CHUNK))});
+  await col.doc(name).set({n,z:B.fromUint8Array(z.subarray(0,FS_CHUNK)),size:str.length,at:firebase.firestore.FieldValue.serverTimestamp()});
+  return z.length;
+}
+async function delPkg(key){
+  const col=db.collection("pub");const d=await col.doc(key).get();if(!d.exists)return;
+  const n=d.data().n||1;for(let i=1;i<n;i++)await col.doc(key+"~"+i).delete();await col.doc(key).delete();
+}
+function newKey(){const a=new Uint8Array(24);crypto.getRandomValues(a);return btoa(String.fromCharCode(...a)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")}
+const norm=s=>String(s||"").replace(/\s+/g,"");
+async function loadKeys(){const d=await db.collection("meta").doc("pubkeys").get();KEYS=d.exists?JSON.parse(d.data().map||"{}"):{}}
+async function saveKeys(){await db.collection("meta").doc("pubkeys").set({map:JSON.stringify(KEYS),at:firebase.firestore.FieldValue.serverTimestamp()})}
+function idxPlayer(name){return IDX.players.find(p=>p[0]===name)||IDX.players.find(p=>norm(p[0])===norm(name))||null}
+async function shard(i){if(!SHARD.has(i))SHARD.set(i,JSON.parse(await readText("files","s"+i+".json")).g);return SHARD.get(i)}
+
+/* 一位棋士的資料包：他的對局、對手那幾欄、匿名化的排名母體 */
+async function buildPkg(name){
+  const p=idxPlayer(name);if(!p)return null;
+  const me=p[0],recs=(await shard(p[2])).filter(g=>g.b===me||g.w===me);
+  const reg=Object.create(null);IDX.players.forEach(x=>reg[x[0]]=x[3]||"ZZ");
+  const ix={};RANK.k.forEach((k,i)=>ix[k]=i);
+  const need=OPP_COLS.map(k=>ix[k]).filter(i=>i!=null);
+  const opps=new Set(recs.map(g=>g.b===me?g.w:g.b));
+  const rows=[],players=[[me,p[1],0,p[3]||"ZZ"]],oppC={};
+  let selfRow=null;
+  const others=RANK.p.filter(r=>{if(r[0]===me){selfRow=r;return false}return true});
+  /* 打亂順序再編代號，看不出是誰 */
+  for(let i=others.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[others[i],others[j]]=[others[j],others[i]]}
+  others.forEach((r,i)=>{
+    if(opps.has(r[0]))oppC[r[0]]=[[1,r[1]]].concat(need.map(c=>[c,r[c]]).filter(x=>x[1]!=null));
+    const t="#"+(i+1),row=r.slice();row[0]=t;rows.push(row);players.push([t,r[1],-1,reg[r[0]]||"ZZ"]);
+  });
+  if(selfRow)rows.push(selfRow);
+  /* 對手也要在名單上（判斷是不是ペア等），只給地區 */
+  opps.forEach(o=>{if(o!==me)players.push([o,0,-1,reg[o]||"ZZ"])});
+  const index={gen:IDX.gen,n:IDX.n,shards:1,players,reg:IDX.reg,fv:{}};
+  const rank=Object.assign({},RANK,{p:rows,oppC});delete rank.idx;
+  return{v:1,gen:new Date().toISOString(),name:me,index,rank,recs};
+}
+
+function draw(){
+  const tb=$("tb");let nGame=0,nLink=0;
+  tb.innerHTML=CPGA.map((c,i)=>{
+    const p=idxPlayer(c.name),k=KEYS[c.name];if(p)nGame++;if(k&&k.k)nLink++;
+    return `<tr><td>${esc(c.name)} <span class="sub">${esc(c.rank||"")}</span></td><td class="num">${p?p[1]:"—"}</td>
+      <td>${k&&k.k?`<span class="ok">已建立</span> <span class="sub">${esc((k.at||"").slice(0,10))}</span>`:p?`<span class="sub">還沒產生</span>`:`<span class="sub">資料庫沒有他的棋譜</span>`}</td>
+      <td>${k&&k.k?`<button class="link" data-reset="${i}">重設連結</button> <button class="link" data-open="${i}">打開</button>`:""}</td></tr>`;
+  }).join("");
+  $("sum").textContent=`職協名單 ${CPGA.length} 位 · 資料庫有對局 ${nGame} 位 · 已建立連結 ${nLink} 位`;
+  $("btnCsv").disabled=$("btnSql").disabled=!nLink;
+}
+async function doLoad(){
+  const pr=$("prog");$("btnLoad").disabled=true;pr.className="msg";pr.textContent="讀取資料庫…";
+  try{
+    IDX=JSON.parse(await readText("files","index.json"));RANK=JSON.parse(await readText("files","rank.json"));
+    pr.textContent="讀取職協棋士名單…";
+    const j=await (await fetch(PLAYERS_URL,{cache:"no-cache"})).json();
+    CPGA=(j.players||[]).map(x=>({id:x.id,name:x.name,rank:x.rank}));
+    await loadKeys();
+    draw();$("btnAll").disabled=false;
+    pr.className="msg ok";pr.textContent=`讀好了：資料庫 ${IDX.n} 局、排名母體 ${RANK.p.length} 位、職協名單 ${CPGA.length} 位。`;
+  }catch(e){pr.className="msg err";pr.textContent="讀取失敗："+(e.message||e)}
+  $("btnLoad").disabled=false;
+}
+async function doAll(){
+  if(!confirm("為每位有對局的職協棋士產生（或更新）資料包？大約要幾分鐘，過程中不要關掉這一頁。"))return;
+  const pr=$("prog");$("btnAll").disabled=$("btnLoad").disabled=true;pr.className="msg";
+  const list=CPGA.filter(c=>idxPlayer(c.name));let done=0,bytes=0;
+  try{
+    for(const c of list){
+      pr.textContent=`產生中 ${done+1}/${list.length}：${c.name}…`;
+      const pkg=await buildPkg(c.name);if(!pkg)continue;
+      const k=KEYS[c.name]&&KEYS[c.name].k||newKey();
+      bytes+=await writeText("pub",k,JSON.stringify(pkg));
+      KEYS[c.name]={k,id:c.id,at:pkg.gen,n:pkg.recs.length};done++;
+      if(done%10===0)await saveKeys();
+    }
+    await saveKeys();draw();
+    pr.className="msg ok";pr.textContent=`完成：${done} 位棋士的資料包已更新（共 ${(bytes/1048576).toFixed(1)} MB）。`;
+  }catch(e){await saveKeys().catch(()=>{});draw();pr.className="msg err";pr.textContent=`做到第 ${done} 位時失敗：`+(e.message||e)+"。再按一次會從頭更新（金鑰不會變）。"}
+  $("btnAll").disabled=$("btnLoad").disabled=false;
+}
+async function doReset(i){
+  const c=CPGA[i],old=KEYS[c.name];if(!old)return;
+  if(!confirm(`重設「${c.name}」的連結？舊連結會馬上失效，要把新的連結表交給官網同事更新。`))return;
+  const pr=$("prog");pr.className="msg";pr.textContent=`重設 ${c.name}…`;
+  try{
+    const pkg=await buildPkg(c.name),k=newKey();
+    await writeText("pub",k,JSON.stringify(pkg));
+    KEYS[c.name]={k,id:c.id,at:pkg.gen,n:pkg.recs.length};await saveKeys();
+    await delPkg(old.k);draw();
+    pr.className="msg ok";pr.textContent=`已重設 ${c.name} 的連結，請重新下載連結表給官網。`;
+  }catch(e){pr.className="msg err";pr.textContent="重設失敗："+(e.message||e)}
+}
+function dl(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
+const linkRows=()=>CPGA.filter(c=>KEYS[c.name]&&KEYS[c.name].k).map(c=>({id:c.id,name:c.name,url:ME_URL+"#k="+KEYS[c.name].k}));
+const today=()=>new Date().toISOString().slice(0,10);
+function doCsv(){
+  const q=s=>`"${String(s).replace(/"/g,'""')}"`;
+  dl(`棋士研究室連結表_${today()}.csv`,"player_id,name,url\n"+linkRows().map(r=>[r.id,r.name,r.url].map(q).join(",")).join("\n")+"\n","text/csv");
+}
+function doSql(){
+  const q=s=>"'"+String(s).replace(/'/g,"''")+"'";
+  const rows=linkRows();
+  const sql=`-- 棋士研究室（限制版）連結表，${today()} 產生，共 ${rows.length} 位\n-- 在 Supabase 的 SQL Editor 執行。會先清空再匯入（重設過連結的棋士會換成新網址）。\n`+
+    `delete from public.qishi_links;\ninsert into public.qishi_links (player_id, url) values\n`+rows.map((r,i)=>`  (${q(r.id)}, ${q(r.url)})${i<rows.length-1?",":";"}  -- ${r.name}`).join("\n")+"\n";
+  dl(`棋士研究室連結表_${today()}.sql`,sql,"text/plain");
+}
+$("btnLoad").onclick=doLoad;$("btnAll").onclick=doAll;$("btnCsv").onclick=doCsv;$("btnSql").onclick=doSql;
+$("tb").onclick=e=>{const b=e.target.closest("[data-reset],[data-open]");if(!b)return;
+  if(b.dataset.reset!=null)doReset(+b.dataset.reset);
+  else{const c=CPGA[+b.dataset.open];window.open(ME_URL+"#k="+KEYS[c.name].k,"_blank","noopener")}};
+auth.onAuthStateChanged(u=>{
+  const g=$("gate");
+  if(!u){g.innerHTML=`請先到 <a href="./">棋士研究室</a> 用管理帳號登入，再回到這一頁。`;$("main").hidden=true;return}
+  if(!ADMIN_EMAILS.includes((u.email||"").toLowerCase())){g.textContent="這一頁只有管理者能用。";$("main").hidden=true;return}
+  g.innerHTML=`<span class="ok">已用管理帳號登入</span>（${esc(u.email)}）`;$("main").hidden=false;
+});
+</script>
+</body></html>
