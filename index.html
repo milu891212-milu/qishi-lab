@@ -1038,7 +1038,7 @@ html.a4on body{overflow:hidden}
    設定與狀態
    ============================================================ */
 const KBAND=40;   /* 關鍵場面＝勝率 50±40%＝10–90% */
-const CFG={pov:"auto",th1:3,th2:8,thF1:8,thF2:15,thM1:15,thM2:30,thE1:2,thE2:5,p1:50,p2:150,depth:4,omode:"self",oself:2,band:"b3",mt:[5,10,20,30,50]};
+const CFG={pov:"auto",rvB:[15,25,25],th1:3,th2:8,thF1:8,thF2:15,thM1:15,thM2:30,thE1:2,thE2:5,p1:50,p2:150,depth:4,omode:"self",oself:2,band:"b3",mt:[5,10,20,30,50]};
 const MTH=[3,5,8,10,15,20,30,50];   /* 排行榜有名次的只有這些門檻 */
 const S={page:"ov",subject:"",col:"all",per:"n0",from:"",to:"",fuTab:"op",fuSel:null,fuStep:null,game:null,move:0,ovMore:3,fuMore:3,
   numMode:"n5",showRec:true,
@@ -1081,6 +1081,9 @@ const THU=ph=>ph===2?" 目":"%",MU=m=>m.u==="目"?" 目":"%",thL=ph=>ph===2?`${C
 const BIG=m=>m.u==="目"?CFG.thE2:m.ph===2?CFG.th2:TH2(m.ph);   /* 這個失誤算不算大失誤 */
 const thTxt=ph=>ph===2?`目數 −${CFG.thE1} 目以上 ／ −${CFG.thE2} 目以上`:`勝率 −${TH1(ph)}% 以上 ／ −${TH2(ph)}% 以上`;
 /* 「大失著」用的門檻：設定裡的 10%（沒有 10% 時用第二個門檻） */
+/* 對局檢討上方「大失著」的門檻（各階段不同：布局 15%、中盤 25%、官子 25%；使用者 2026-11-23 指定）。
+   總覽、排行榜、分析報告的「大失著」仍是 K10（10%） */
+const RVB=ph=>(Array.isArray(CFG.rvB)&&CFG.rvB[ph]>0?CFG.rvB[ph]:[15,25,25][ph]);
 const K10=()=>CFG.mt.indexOf(10)>=0?CFG.mt.indexOf(10):Math.min(1,CFG.mt.length-1);
 const phaseOf=n=>n<=CFG.p1?0:n<=CFG.p2?1:2;
 const PHR=()=>[`1–${CFG.p1} 手`,`${CFG.p1+1}–${CFG.p2} 手`,`${CFG.p2+1} 手以後`];
@@ -1471,7 +1474,7 @@ function toGame(raw,id,subj){
   const mist=[],loss=[[0,0],[0,0],[0,0]],agree=[[0,0],[0,0],[0,0]],agree3=[[0,0],[0,0],[0,0]];
   const srch=[[0,0,0],[0,0,0],[0,0,0]];   /* [phase] = [top1, top3, count] */
   const bS={},bC={};BANDS.forEach(b=>{bS[b.id]=[0,0,0];bC[b.id]=[0,0,0]});
-  const mtC=CFG.mt.map(()=>[0,0,0]),nC=[0,0,0];
+  const mtC=CFG.mt.map(()=>[0,0,0]),nC=[0,0,0],rbC=[0,0,0];
   /* 關鍵場面（勝率 10–90%）に限った失着。等級分で検証した結果、この幅がいちばん当たる */
   const ktC=CFG.mt.map(()=>[0,0,0]),kC=[0,0,0];
   const AB=BAND();
@@ -1486,6 +1489,7 @@ function toGame(raw,id,subj){
     const pre=wr[k];
     nC[p]++;
     CFG.mt.forEach((t,i)=>{if(drop>=t)mtC[i][p]++});
+    if(drop>=RVB(p))rbC[p]++;
     if(Math.abs(pre-50)<=KBAND){kC[p]++;CFG.mt.forEach((t,i)=>{if(drop>=t)ktC[i][p]++})}
     if(d!=null)BANDS.forEach(b=>{if(inBand(pre,b)){bS[b.id][p]+=d;bC[b.id][p]++}});
     if(m.rank!=null){agree[p][1]++;agree3[p][1]++;if(m.rank===1)agree[p][0]++;if(m.rank<=3)agree3[p][0]++}
@@ -1506,7 +1510,7 @@ function toGame(raw,id,subj){
   const ln=loss.reduce((a,b)=>a+b[0],0),lc=loss.reduce((a,b)=>a+b[1],0);
   const an=agree.reduce((a,b)=>a+b[0],0),ac=agree.reduce((a,b)=>a+b[1],0);
   return{id,raw,sz:raw.sz,c:sc,opp:sc==="B"?raw.pw:raw.pb,oppRank:sc==="B"?raw.wr:raw.br,
-    lSum:loss.map(a=>a[0]),lCnt:loss.map(a=>a[1]),aSum:agree.map(a=>a[0]),aCnt:agree.map(a=>a[1]),a3Sum:agree3.map(a=>a[0]),sSum:srch.map(a=>a[0]),s3Sum:srch.map(a=>a[1]),sCnt:srch.map(a=>a[2]),bS,bC,mtC,nC,ktC,kC,
+    lSum:loss.map(a=>a[0]),lCnt:loss.map(a=>a[1]),aSum:agree.map(a=>a[0]),aCnt:agree.map(a=>a[1]),a3Sum:agree3.map(a=>a[0]),sSum:srch.map(a=>a[0]),s3Sum:srch.map(a=>a[1]),sCnt:srch.map(a=>a[2]),bS,bC,mtC,nC,ktC,kC,rbC,
     evt:raw.evt,date:parseDT(raw.dt),dt:raw.dt,moves:raw.moves,setup:raw.setup,len:N,
     wr,hasWR:any,mist,loss:L,lossAll:lc?ln/lc:null,agree:A,agree3:A3,sr1:SR,sr3:SR3,
     sr1All:(()=>{const x=srch.reduce((a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],[0,0,0]);return x[2]?x[0]/x[2]*100:null})(),
@@ -1926,7 +1930,8 @@ function phaseStats(list){
       s1+=g.sSum[p];s3+=g.s3Sum[p];sn+=g.sCnt[p];
       kn+=g.kC[p];
       CFG.mt.forEach((t,i)=>{mc[i]+=g.mtC[i][p];kc[i]+=g.ktC[i][p]})});
-    return{p,m:m/n,big:big/n,loss:lc?ls/lc:null,agree:ac?as/ac*100:null,agree3:ac?a3/ac*100:null,
+    const rb=list.reduce((a,g)=>a+(g.rbC?g.rbC[p]:0),0);
+    return{p,m:m/n,big:big/n,rb:rb/n,loss:lc?ls/lc:null,agree:ac?as/ac*100:null,agree3:ac?a3/ac*100:null,
       sr1:sn?s1/sn*100:null,sr3:sn?s3/sn*100:null,
       mr:mc.map(c=>nn?c/nn*100:null),mpg:mc.map(c=>c/n),mn:mc,nn,
       kr:kc.map(c=>kn?c/kn*100:null),kn};
@@ -4858,7 +4863,7 @@ function renderPH(ph){
   const PQ=phaseQ(L),pid=PQID[ph],k10=K10(),rq=phaseRank(ps,L,ph);
   el.innerHTML=phSel+`<section class="kpis">
     <div class="kpi"><div class="l">${PH[ph]}比平均棋士</div><div class="v num">${PQ&&PQ[pid]!=null?qfMain(pid,PQ[pid],PQ)+(ph<2?"／局":"／手"):"—"}</div><div class="s">${PQ&&PQ[pid]!=null?(rq?`評價 ${TLAB[TIER(rq.pct)]} · `:"")+"已考慮對手強弱":"考慮對手強弱的數字算不出來"}</div></div>
-    <div class="kpi"><div class="l">${PH[ph]}大失著（勝率掉 ${CFG.mt[k10]}% 以上）</div><div class="v num">${p.mpg[k10]==null?"—":p.mpg[k10].toFixed(2)}<span style="font-size:15px"> 次/局</span></div><div class="s">${others.map(o=>`${PH[o.p]} ${o.mpg[k10]==null?"—":o.mpg[k10].toFixed(2)}`).join(" · ")}</div></div>
+    <div class="kpi"><div class="l">${PH[ph]}大失著（勝率掉 ${RVB(ph)}% 以上）</div><div class="v num">${p.rb.toFixed(2)}<span style="font-size:15px"> 次/局</span></div><div class="s">${others.map(o=>`${PH[o.p]}（${RVB(o.p)}%）${o.rb.toFixed(2)}`).join(" · ")}</div></div>
     <div class="kpi"><div class="l">每局標記的失誤</div><div class="v num">${p.m.toFixed(1)} <span style="font-size:15px;color:var(--muted)">/ ${p.big.toFixed(1)}</span></div><div class="s">${thTxt(ph)}</div></div>
     <div class="kpi"><div class="l">${PH[ph]}最差的一局</div><div class="v num" style="font-size:20px">${fmtS(worstG.date)}</div><div class="s">vs ${esc(worstG.opp)} · ${fx(worstG.loss[ph],2)}%／手</div></div>
   </section>
