@@ -5938,6 +5938,57 @@ const delSet=p=>{DEL.prog=p;UP.prog=p;const e=document.getElementById("delProg")
 const delRefresh=()=>{if(S.page==="dt"&&S.dtTab==="search")renderDT()};
 const dbNow=k=>{const t=new Date(),pad=n=>String(n).padStart(2,"0"),day=`${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
   return{day,at:`${day}T${pad(t.getHours())}:${pad(t.getMinutes())}`,stamp:k+day.replace(/-/g,"")+pad(t.getHours())+pad(t.getMinutes())+pad(t.getSeconds())}};
+/* ---------- 限制版（職協官網，…/qishi-lab/me/）的資料包：上傳、刪除、復原、重算排名之後自動更新 ----------
+   做法和 me-admin.html 的 buildPkg 相同：meta/pubkeys 裡有金鑰的棋士，每人重寫一份 pub/<金鑰>
+   （他的對局、對手算「對手強弱」要的幾欄、其他棋士換成代號的排名母體）。
+   還沒建過任何連結時不做事；失敗不影響剛才的上傳，只在訊息後面提醒到限制版管理頁補做 */
+const ME_OPP_COLS=["θT1","θW","OPx","MGx","EGt","EGq","Rt"];
+function mePkg(name,shards){
+  const p=INDEX.players.find(x=>x[0]===name);if(!p||!RANK)return null;
+  const recs=(shards[p[2]]||[]).filter(r=>r&&(r.b===name||r.w===name));
+  const reg=Object.create(null);INDEX.players.forEach(x=>reg[x[0]]=x[3]||"ZZ");
+  const ix={};RANK.k.forEach((k,i)=>ix[k]=i);
+  const need=ME_OPP_COLS.map(k=>ix[k]).filter(i=>i!=null);
+  const opps=new Set(recs.map(g=>g.b===name?g.w:g.b));
+  const rows=[],players=[[name,p[1],0,p[3]||"ZZ"]],oppC={};
+  let selfRow=null;
+  const others=RANK.p.filter(r=>{if(r[0]===name){selfRow=r;return false}return true});
+  for(let i=others.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[others[i],others[j]]=[others[j],others[i]]}   /* 打亂再編代號 */
+  others.forEach((r,i)=>{
+    if(opps.has(r[0]))oppC[r[0]]=[[1,r[1]]].concat(need.map(c=>[c,r[c]]).filter(x=>x[1]!=null));
+    const t="#"+(i+1),row=r.slice();row[0]=t;rows.push(row);players.push([t,r[1],-1,reg[r[0]]||"ZZ"]);
+  });
+  if(selfRow)rows.push(selfRow);
+  opps.forEach(o=>{if(o!==name)players.push([o,0,-1,reg[o]||"ZZ"])});
+  const index={gen:INDEX.gen,n:INDEX.n,shards:1,players,reg:INDEX.reg,fv:{}};
+  const rank=Object.assign({},RANK,{p:rows,oppC});delete rank.idx;
+  return{v:1,gen:new Date().toISOString(),name,index,rank,recs};
+}
+async function meWrite(key,str){
+  const gz=await fsGz(str),n=Math.max(1,Math.ceil(gz.length/FS_CHUNK)),col=FS.db.collection("pub"),B=firebase.firestore.Blob;
+  for(let i=1;i<n;i++)await fsW(col.doc(key+"~"+i).set({z:B.fromUint8Array(gz.subarray(i*FS_CHUNK,(i+1)*FS_CHUNK))}));
+  await fsW(col.doc(key).set({n,z:B.fromUint8Array(gz.subarray(0,FS_CHUNK)),size:str.length,at:firebase.firestore.FieldValue.serverTimestamp()}));
+}
+async function meAuto(shards,say){
+  if(!FS.db||!ROLE.admin||!shards)return "";
+  let n=0;
+  try{
+    const ref=FS.db.collection("meta").doc("pubkeys"),d=await fsW(ref.get());
+    if(!d.exists)return "";
+    const keys=JSON.parse(d.data().map||"{}"),names=Object.keys(keys).filter(k=>keys[k]&&keys[k].k);
+    if(!names.length)return "";
+    for(const nm of names){
+      say(`更新限制版（職協官網）的資料 ${n+1}/${names.length}：${nm}…`);
+      const pkg=mePkg(nm,shards);if(!pkg)continue;
+      await meWrite(keys[nm].k,JSON.stringify(pkg));
+      keys[nm].at=pkg.gen;keys[nm].n=pkg.recs.length;n++;
+    }
+    await fsW(ref.set({map:JSON.stringify(keys),at:firebase.firestore.FieldValue.serverTimestamp()}));
+    return ` 限制版（職協官網）${n} 位棋士的資料也已更新。`;
+  }catch(e){
+    return ` <span style="color:var(--bad)">限制版（職協官網）的資料${n?`只更新了 ${n} 位`:"沒有更新成功"}（${esc((e&&e.message)||String(e))}），請到限制版管理頁（me-admin.html）按「更新全部資料包」。</span>`;
+  }
+}
 /* 發布：伺服器要求稍候時最多再試 3 次，其他錯誤丟給呼叫的人 */
 async function dbPublish(art,files,tag,say){
   let tries=0;
@@ -6044,6 +6095,7 @@ async function delCommit(idx){
     }
     if(rankDirty){delSet("重算全部棋士的排名（畫面會暫停）…");await new Promise(r=>setTimeout(r,60));await upPublishRank(art,shards);rankDirty=false}
     DEL.msg=`已刪除 <b>${done}</b> 局${parts>1?`（分成 ${parts} 次儲存）`:""}。排名已重算，其他人重新整理畫面後就會看到。刪除的棋譜可以在「管理」頁的「資料庫更新紀錄」復原。`;
+    DEL.msg+=await meAuto(shards,delSet);
     DEL.on=false;DEL.sel.clear();
   }catch(e){
     if(e)DEL.err=DEL.err||("刪除失敗："+((e&&e.message)||e));
@@ -6116,6 +6168,7 @@ async function delRestore(bid){
       upSet("記錄…");await dbPublish(art,{"data/uploads.json":JSON.stringify(nUpl),"data/index.json":JSON.stringify(nIndex)},"",upSet);INDEX=nIndex;UPL=nUpl;pendDup=0}
     if(saved)UP.msg=`已復原 <b>${saved}</b> 局${parts>1?`（分成 ${parts} 次儲存）`:""}。排名已重算，其他人重新整理畫面後就會看到。`;
     else UP.msg="這些棋譜都已經在資料庫裡（例如之後又上傳過），不需要再放回；已記錄為復原完成。";
+    if(saved)UP.msg+=await meAuto(shards,upSet);
   }catch(e){
     if(e)UP.err=UP.err||("復原失敗："+((e&&e.message)||e));
     if(saved)UP.msg=`已復原 <b>${saved}</b> 局（${parts} 次），還沒全部完成：再按一次「復原」會接著放回剩下的。${rankDirty?"排名還沒有重算：請按「重新計算排名」。":""}`;
@@ -6416,7 +6469,7 @@ async function upRankOnly(){
   try{
     upSet("讀入資料庫…");const shards=await loadAllShards((d,n)=>upSet(`讀入資料庫… ${d}/${n}`));
     upSet("重算全部棋士的排名（畫面會暫停，請不要關閉）…");await new Promise(r=>setTimeout(r,80));
-    await upPublishRank(art,shards);UP.msg="排名與各項指標已重新計算。其他人重新整理畫面後就會看到。";syncHeader();
+    await upPublishRank(art,shards);UP.msg="排名與各項指標已重新計算。其他人重新整理畫面後就會看到。";UP.msg+=await meAuto(shards,upSet);syncHeader();
   }catch(e){UP.err=upErr(e)}
   window.removeEventListener("beforeunload",guard);UP.busy=false;UP.prog="";renderDT();
 }
@@ -6520,6 +6573,7 @@ async function upCommit(){
     UP.items=UP.items.filter(x=>!snap.includes(x));UP.reg=Object.create(null);UP.src=Object.create(null);
     UP.msg=saved?`已上傳 <b>${saved}</b> 局${parts>1?`（自動分成 ${parts} 次儲存）`:""}${nd?`，略過重複 ${nd} 局`:""}${nb?`，無法使用 ${nb} 個`:""}。排名已重算，其他人重新整理畫面後就會看到。<button class="link" id="upReload">重新載入這個畫面</button>`:"";
     if(!saved)UP.err="沒有新的對局（全部都已在資料庫裡或無法使用）。";
+    else UP.msg+=await meAuto(shards,upSet);
     if(saved&&S.subject&&MODE==="data"){await loadPlayer(S.subject);rebuild()}
     syncHeader();
   }catch(e){
