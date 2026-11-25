@@ -269,6 +269,7 @@ nav.pages button.on{color:var(--ink);border-bottom-color:var(--accent);font-weig
 .rkleg{margin-top:6px}
 .rkleg .nw{white-space:nowrap}
 .rkdesc{margin-top:10px;font-size:13px;line-height:1.6}
+.prkn{margin:0 0 12px;padding:8px 12px;border-left:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent);font-size:13px;line-height:1.6}
 .rkme{margin-top:10px;font-size:13px}
 table.rkx th.on,table.rkx td.on{background:var(--accent-bg)}
 table.rkx td.on{font-weight:600;color:var(--accent-ink)}
@@ -4393,7 +4394,81 @@ function rkHelp(){
   <p class="sub" style="margin-top:10px"><b>為什麼要考慮對手強弱？</b>強的棋士常碰到強的對手，棋局也比較難，直接看 AI 一致度之類的數字反而吃虧。所以每一局都和同一盤棋的對手比（同樣的難度），再加上對手本身的水準。</p>
   ${RANK&&RANK.qf&&RANK.qf.cv?`<details class="more" id="rkHelpD"><summary>「反映實力」是怎麼判斷的？</summary><p class="sub" style="margin-top:6px">${cvSay()}</p></details>`:""}</section>`;
 }
+/* ---------- 排行榜跟著上方的「期間」「執子」 ----------
+   全部＋不分黑白＝rank.json（全期間，上傳時算好）。其他＝讀全部棋譜，每位棋士各自取這段期間（或最近 N 局）的對局，
+   用和總覽同一套算法（qfVals：對手水準用全期間的值）重算。所以排行榜上的數字＝那位棋士在總覽選同一個期間看到的數字。
+   第一次要讀全部棋譜（之後留在記憶體），換期間只重算（約 1 秒）。 */
+const PRK={by:null,last:null,loading:null,prog:"",err:"",key:"",R:null,base:null};
+const prkKey=()=>MODE!=="data"||!RANK||!RANK.qf||(S.per==="n0"&&S.col==="all")?"":[S.per,S.per==="custom"?(S.from||"")+"~"+(S.to||""):"",S.col].join("|");
+function prkLoad(){
+  if(!PRK.loading){PRK.base=RANK;PRK.err="";PRK.loading=(async()=>{
+    const sh=await loadAllShards((d,n)=>{PRK.prog=`讀入全部棋譜… ${d}/${n}`;const p=document.getElementById("prkProg");if(p)p.textContent=PRK.prog});
+    const recs=rbCollect(sh,null),by=new Map();let last=null;
+    for(const r of recs){
+      const dm=/^(\d{4})-(\d{2})-(\d{2})/.exec(r.d||""),d=dm?new Date(+dm[1],dm[2]-1,+dm[3]):null;
+      if(d&&(!last||d>last))last=d;
+      const G={r,d,win:rbWinner(r.r),raw:null,hw:false};
+      [[r.b,"B",r.w],[r.w,"W",r.b]].forEach(([nm,c,opp])=>{if(!nm)return;if(!by.has(nm))by.set(nm,[]);by.get(nm).push({G,c,opp})});
+    }
+    by.forEach(L=>L.sort((a,b)=>a.G.d&&b.G.d?b.G.d-a.G.d:a.G.d?-1:b.G.d?1:0));   /* 新的在前（和研究對象的對局列表同樣排法） */
+    PRK.by=by;PRK.last=last||new Date();
+  })().catch(e=>{PRK.err=(e&&e.message)||String(e);PRK.loading=null})}
+  return PRK.loading;
+}
+function prkBuild(){
+  const T=PRK.last,K=RANK.k,ix=RANK.idx,PL={m3:"近 3 個月",m6:"近 6 個月",y1:"近 1 年"};
+  let from=null,to=null,nMax=0,txt;
+  if(S.per[0]==="n"){nMax=+S.per.slice(1);txt=`每位棋士各自最近 ${nMax} 局`}
+  else{
+    to=new Date(T.getTime()+864e5);
+    if(S.per==="custom"){from=S.from?new Date(S.from+"T00:00"):new Date(1900,0,1);if(S.to)to=new Date(S.to+"T23:59");txt=`${S.from||"最早"} ～ ${S.to||"最新"}`}
+    else{const mm={m3:3,m6:6,y1:12}[S.per]||12;from=new Date(T.getFullYear(),T.getMonth()-mm,T.getDate());txt=`${PL[S.per]||"選定期間"}（${fmtD(from)} ～ ${fmtD(T)}，以資料庫最新一局為準）`}
+  }
+  if(S.col!=="all")txt+=`，只算${S.col==="B"?"執黑":"執白"}的對局`;
+  const rows=[],used=new Set();
+  PRK.by.forEach((L0,nm)=>{
+    let L=nMax?L0.slice(0,nMax):L0.filter(x=>x.G.d&&x.G.d>=from&&x.G.d<=to);
+    if(S.col!=="all")L=L.filter(x=>x.c===S.col);
+    if(!L.length)return;
+    const gl=L.map(x=>{const G=x.G;used.add(G);
+      if(!G.raw){const mv=rbDecode(G.r);G.raw={moves:[],pb:G.r.b,pw:G.r.w,evalBefore:true,pov:"B",_qf:qfGame(mv)};G.hw=mv.some(m=>m.w!=null)}
+      return{raw:G.raw,sz:19,c:x.c,opp:x.opp,win:G.win==null?null:G.win===x.c,hasWR:G.hw}});
+    const v=qfVals(gl),row=new Array(K.length).fill(null),dec=gl.filter(g=>g.win!=null);
+    row[0]=nm;row[1]=gl.length;
+    ["Rt","T1x","Wx","OPx","MGx","EGx","EGt","EGq"].forEach(k=>{if(ix[k]!=null&&v[k]!=null)row[ix[k]]=v[k]});
+    if(ix.win!=null&&dec.length)row[ix.win]=Math.round(dec.filter(g=>g.win).length/dec.length*1000)/10;
+    rows.push(row);
+  });
+  rows.sort((a,b)=>b[1]-a[1]);
+  return Object.assign({},RANK,{p:rows,n:rows.length,perTxt:txt,nG:used.size,minCap:nMax&&S.col!=="all"?Math.floor(nMax/2):nMax});   /* 最近 N 局再分黑白，每人大約剩一半 */
+}
 function renderRK(){
+  const key=prkKey();
+  if(!key)return renderRK0();
+  const el=document.getElementById("page-rk");
+  if(PRK.base&&PRK.base!==RANK)Object.assign(PRK,{by:null,loading:null,key:"",R:null,base:null});   /* 資料庫更新過：重讀 */
+  const wait=(t,extra)=>{el.innerHTML=`<section class="panel"><div class="panel-h"><h2>排行榜</h2><p>依上方選的期間重新計算</p></div>
+    <p id="prkProg" aria-live="polite">${t}</p>${extra||""}
+    <p class="sub" style="margin-top:8px">要看全期間的排名，把上方「期間」改回「全部」${S.col!=="all"?"、「執子」改回「全部」":""}。</p></section>`};
+  if(!PRK.by){
+    if(PRK.err&&!PRK.loading){wait(`讀取失敗：${esc(PRK.err)}`,`<button class="pbtn" id="prkRetry">再試一次</button>`);
+      document.getElementById("prkRetry").onclick=()=>{PRK.err="";renderRK()};return}
+    wait(esc(PRK.prog||"讀入全部棋譜…"),`<p class="sub">第一次要讀入全部棋譜，需要一點時間；之後換期間就很快。</p>`);
+    prkLoad().then(()=>{if(S.page==="rk")renderRK()});
+    return;
+  }
+  if(PRK.key!==key){
+    wait("計算這段期間的排名…");
+    setTimeout(()=>{const k=prkKey();if(!k||PRK.key===k){if(S.page==="rk")renderRK();return}
+      PRK.R=prkBuild();PRK.key=k;if(S.page==="rk")renderRK()},30);
+    return;
+  }
+  /* 用這段期間的排名畫（畫完換回全期間的，總覽等其他頁不受影響） */
+  const R0=RANK,m0=S.rkMin;RANK=PRK.R;
+  if(RANK.minCap&&m0>RANK.minCap){S.rkMin=RANK.minCap;RANK.minNote=`每人只取最近 ${PRK.R.perTxt.match(/\d+/)[0]} 局${S.col!=="all"?"（再分黑白）":""}，「最少局數」先當作 ${RANK.minCap} 局。`}else RANK.minNote="";
+  try{renderRK0()}finally{RANK=R0;S.rkMin=m0}
+}
+function renderRK0(){
   const el=document.getElementById("page-rk");
   if(!RANK){el.innerHTML=`<section class="panel"><h2>排行榜</h2><p class="sub">排名資料未載入。</p></section>`;return}
   const set=rkSet();
@@ -4406,7 +4481,8 @@ function renderRK(){
   const show=Math.max(S.rkMore,meIdx>=0&&S.rkJump?meIdx+6:0);
   const rows=pool.slice(0,show).map((r,n)=>[r,n+1]);
   const lv=relLv(X.id);
-  el.innerHTML=`<section class="panel"><div class="panel-h"><h2>排行榜${regSel().length?"　"+regTags():""}</h2><p>${pool.length} 位棋士（${MINL(S.rkMin)}）· 全期間 ${INDEX?INDEX.n.toLocaleString():""} 局${regSel().length?" · 只排選到的地區（上方「比較對象」可改）":""}</p></div>
+  el.innerHTML=`<section class="panel"><div class="panel-h"><h2>排行榜${regSel().length?"　"+regTags():""}</h2><p>${pool.length} 位棋士（${MINL(S.rkMin)}）· ${RANK.perTxt?"這段期間 "+RANK.nG.toLocaleString():"全期間 "+(INDEX?INDEX.n.toLocaleString():"")} 局${regSel().length?" · 只排選到的地區（上方「比較對象」可改）":""}</p></div>
+  ${RANK.perTxt?`<p class="prkn">依上方「期間」${S.col!=="all"?"和「執子」":""}重新計算：<b>${esc(RANK.perTxt)}</b>。和總覽同一套算法（對手強弱用全期間的水準）。${RANK.minNote?" "+esc(RANK.minNote):""}${S.rkMin>1&&pool.length<30?` 這段期間 ${MINL(S.rkMin)}的棋士只有 ${pool.length} 位，可以把上方「最少局數」調低。`:""}</p>`:""}
   <p class="seglab" style="margin:0 0 6px">依哪個項目排名</p>
   <div class="rkpick" role="radiogroup" aria-label="依哪個項目排名">${set.map(x=>`<button role="radio" aria-checked="${x.id===X.id}" tabindex="${x.id===X.id?0:-1}" class="${x.id===X.id?"on":""}" data-rk="${x.id}"><span class="t"><b>${x.nm}</b>${relDots(relLv(x.id))}</span><small>${x.sh}</small></button>`).join("")}</div>
   <p class="rkleg sub">${[3,2,1].map(l=>`<span class="nw">${relDots(l)} ${RELL[l]}</span>`).join("　")}${RANK.qf&&RANK.qf.cv?`　<button class="link" id="rkHow">怎麼判斷的？</button>`:""}</p>
