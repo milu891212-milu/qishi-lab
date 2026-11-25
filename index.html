@@ -3909,12 +3909,13 @@ function distBar(r,t,dev,id){
      值 ＝ Σ 權重×（我這局的數字 − 對手這局的數字 ＋ 對手的水準）÷（Σ 權重 ＋ λ）
    對手的水準（θ）由全部 9,274 局一起解出來（dev/q_gen.js），存在 rank.json。 */
 /* bt0＝等級分的事前分布（logit 的精度，σ≈780 分）。再強會把整個聯賽（例如中國）一起往平均拉，跨地區的比較會失真 */
-const QF={lam:{T1:2,W:2,OP:0.5,MG:0.5,EGt:1,EGq:1},live:{T1:0,W:0,OP:0.5,MG:0.5,EGt:1,EGq:1},bt0:0.05};
+const QF={lam:{T1:2,W:2,OP:0.5,MG:0.5,EGt:1,EGq:1},live:{T1:0,W:0,OP:0.5,MG:0.5,EGt:1,EGq:1},bt0:0.05,opK:5};
+/* opK＝布局「吻合扣失誤」的分子分母各加幾手「全體平均水準」（手數少的人不會太極端） */
 /* 一局的特徵。mv＝decode 後的 moves：c 手番、p 座標（null＝虛手）、w 黑勝率（下這手之前）、score 黑目數差（下這手之前）、srank 實戰手在 AI 搜尋中的順位（1＝最善）。
    B/W＝雙方各自的累計：nS/t1 有順位的手數／最善手數；nW/W 勝率 10–90% 時的手數／勝率損失合計；nE/e1 官子（151 手起）的手數／最善手數；
-   nQ/q 官子、目數差 15 目以內的手數／損失目數合計（每手 ±10 截斷）。op/mg＝黑方視角的布局（第 1→51 手前）與中盤（第 51→151 手前，提早結束用最後的評價，±8 目截斷）得失 */
+   nQ/q 官子、目數差 15 目以內的手數／損失目數合計（每手 ±10 截斷）；mn/ma 第 1–50 手有 AI 順位的手數／吻合扣失誤的得分合計。op/mg＝黑方視角的布局（第 1→51 手前）與中盤（第 51→151 手前，提早結束用最後的評價），都 ±8 目截斷 */
 function qfGame(mv){
-  const N=mv.length,S0=()=>({nS:0,t1:0,nW:0,W:0,nE:0,e1:0,nQ:0,q:0}),o={B:S0(),W:S0(),op:null,mg:null};
+  const N=mv.length,S0=()=>({nS:0,t1:0,nW:0,W:0,nE:0,e1:0,nQ:0,q:0,ma:0,mn:0}),o={B:S0(),W:S0(),op:null,mg:null};
   const cl=(v,a,b)=>v<a?a:v>b?b:v;
   const wB=new Array(N+1).fill(null);for(let k=0;k<N;k++)wB[k]=mv[k].w;
   const anyW=wB.some(v=>v!=null);   /* 整局都沒有勝率資料時，失著不算（否則會變成「每手都沒損失」） */
@@ -3926,12 +3927,14 @@ function qfGame(mv){
     if(m.srank!=null){S.nS++;if(m.srank===1)S.t1++;if(eg){S.nE++;if(m.srank===1)S.e1++}}
     const wb=cl(bl?wB[k]:100-wB[k],0,100),wa=cl(bl?wB[k+1]:100-wB[k+1],0,100);
     if(anyW&&wb>=10&&wb<=90){S.nW++;S.W+=Math.max(0,wb-wa)}
+    /* 布局的「吻合扣失誤」（第 1–50 手、有 AI 順位的手）：AI 首選 +2、第 2–3 選 +1；這手讓自己勝率掉 10／20／30 點以上 −2／−4／−6 */
+    if(k<50&&m.srank!=null){const d=anyW?wb-wa:0;S.ma+=(m.srank===1?2:m.srank<=3?1:0)-2*(d>=30?3:d>=20?2:d>=10?1:0);S.mn++}
     if(eg&&k+1<N){const sb=m.score,sa=mv[k+1].score;
       if(sb!=null&&sa!=null){const b=bl?sb:-sb,a=bl?sa:-sa;if(Math.abs(b)<=15){S.nQ++;S.q+=cl(b-a,-10,10)}}}
   }
   const last=k0=>{for(let k=N-1;k>=k0;k--)if(mv[k].score!=null)return mv[k].score;return null};
   const s0=N>0?mv[0].score:null,s50L=N>50?mv[50].score:last(0),s50=N>50?mv[50].score:null,s150L=N>150?mv[150].score:(N>50?last(50):null);
-  if(s0!=null&&s50L!=null)o.op=s50L-s0;
+  if(s0!=null&&s50L!=null)o.op=cl(s50L-s0,-8,8);   /* 布局的目差和中盤一樣每局最多算 ±8 目（一盤大崩盤不會把平均拉走） */
   if(N>50&&s50!=null&&s150L!=null)o.mg=cl(s150L-s50,-8,8);
   return o;
 }
@@ -3966,12 +3969,13 @@ function qfRow(name){
 }
 /* 一組對局（toGame 的結果）的新指標。全期間時和 rank.json 的值一致；期間、執子篩選時也照同樣的式子算 */
 function qfVals(L){
-  const out={Rt:null,T1x:null,Wx:null,OPx:null,MGx:null,EGx:null,EGt:null,EGq:null,qse:{}};
+  const out={Rt:null,T1x:null,Wx:null,OPx:null,MGx:null,EGx:null,EGt:null,EGq:null,OPm:null,OPa:null,qse:{}};
+  const opN=OPNEW(),oa=[0,0,0,0,[]];   /* 吻合扣失誤：得分合計、手數、對手布局分數合計、局數、各局[每手得分,手數] */
   const cr=[0,0,0,0];   /* 官子兩項（EGt×EGq）的交叉積：Σw1w2·x1x2、Σw1w2·x1、Σw1w2·x2、Σw1w2（兩項來自同一批官子著手，誤差相關） */
   if(!RANK||!RANK.qf||!L||!L.length)return out;
   /* 自行載入／我的棋譜庫：對手在資料庫裡的對局不到 5 局時，考慮對手強弱的指標不可靠（一兩局就會顯示「頂尖」），不算 */
   if(typeof MODE!=="undefined"&&MODE==="sgf"&&L.filter(g=>g.raw&&g.raw.pb!==g.raw.pw&&qfRow(g.opp)).length<5)return out;
-  const ix=RANK.idx,col={T1:"θT1",W:"θW",OP:"OPx",MG:"MGx",EGt:"EGt",EGq:"EGq"},acc={},res=[];
+  const ix=RANK.idx,col={T1:"θT1",W:"θW",OP:opN?"OPm":"OPx",MG:"MGx",EGt:"EGt",EGq:"EGq"},acc={},res=[];
   for(const k in col)acc[k]=[0,0,0,0,0,0];   /* Σw·x、Σw、Σw²、Σw²x、Σw²x²、局數（x＝這局的差＋對手的水準；後四個是誤差範圍用） */
   for(const g of L){
     if(!g.raw||g.sz!==19||!g.raw.moves||g.raw.pb===g.raw.pw)continue;   /* 同名的兩人對局分不出是誰的，不算（dev/q_gen.js 也一樣） */
@@ -3982,6 +3986,7 @@ function qfVals(L){
     const gx={};
     for(const k in col){if(k==="W"&&!g.hasWR)continue;const t=row[ix[col[k]]];if(t==null)continue;const q=qfPair(f,g.c,k);if(!q)continue;const w=q[1],x=q[0]+t,a=acc[k];a[0]+=w*x;a[1]+=w;a[2]+=w*w;a[3]+=w*w*x;a[4]+=w*w*x*x;a[5]++;gx[k]=[w,x]}
     if(gx.EGt&&gx.EGq){const[w1,x1]=gx.EGt,[w2,x2]=gx.EGq,ww=w1*w2;cr[0]+=ww*x1*x2;cr[1]+=ww*x1;cr[2]+=ww*x2;cr[3]+=ww}
+    if(opN){const t=row[ix.OPm],s=f[g.c];if(t!=null&&s){oa[0]+=s.ma||0;oa[1]+=s.mn||0;oa[2]+=t;oa[3]++;if(s.mn)oa[4].push([s.ma/s.mn,s.mn])}}
     const rt=row[ix.Rt];if(rt!=null&&g.win!=null)res.push([(rt-1500-(RANK.qf.anchor.Rt||0))*Math.LN10/400,g.win?1:0]);
   }
   const lv=k=>acc[k][1]?acc[k][0]/(acc[k][1]+QF.live[k]):null,A=RANK.qf.anchor||{},E=RANK.qf.eg;
@@ -3993,6 +3998,12 @@ function qfVals(L){
   out.T1x=t1==null?null:(t1+(A.T1||0))*100;
   out.Wx=w==null?null:-(w+(A.W||0));
   out.OPx=lv("OP");out.MGx=lv("MG");out.EGt=lv("EGt");out.EGq=lv("EGq");
+  const O=RANK.qf.op;
+  if(opN){
+    out.OPm=out.OPx;out.OPx=null;
+    if(oa[3])out.OPa=(oa[0]+O.k*O.mu)/(oa[1]+O.k)-O.beta*(oa[2]/oa[3]-O.om);
+    if(out.OPm!=null&&out.OPa!=null)out.OPx=50+10*((out.OPm-O.pm)/O.sdp+(out.OPa-O.pa)/O.sda-O.cm)/O.csd;
+  }
   if(out.EGt!=null&&out.EGq!=null&&E)out.EGx=50+10*(((out.EGt-E.mt)/E.sdt+(out.EGq-E.mq)/E.sdq)-E.cm)/E.csd;
   if(res.length){
     const r=qfPerf(res);out.Rt=1500+(A.Rt||0)+r*400/Math.LN10;
@@ -4001,6 +4012,11 @@ function qfVals(L){
   }
   {const a=se("T1"),b=se("W"),c=se("EGt"),d=se("EGq");
    out.qse.T1x=a==null?null:a*100;out.qse.Wx=b;out.qse.OPx=se("OP");out.qse.MGx=se("MG");
+   if(opN){out.qse.OPm=out.qse.OPx;out.qse.OPx=null;
+     /* 吻合扣失誤的誤差：各局每手得分的加權分散（手數加權）；合併分數的誤差＝兩項各自換算後合起來（當作互相獨立，粗估） */
+     const it=oa[4],W=it.reduce((p,q)=>p+q[1],0);
+     if(W&&out.qse.OPm!=null){const y=it.reduce((p,q)=>p+q[0]*q[1],0)/W,v=it.reduce((p,q)=>p+q[1]*q[1]*(q[0]-y)**2,0),sa=Math.sqrt(v*it.length/Math.max(1,it.length-1))/(W+O.k);
+       out.qse.OPa=sa;out.qse.OPx=10*Math.sqrt((out.qse.OPm/O.sdp)**2+(sa/O.sda)**2)/O.csd}}
    if(c!=null&&d!=null&&E){
      const m1=acc.EGt[0]/acc.EGt[1],m2=acc.EGq[0]/acc.EGq[1];
      const cov=cr[3]?(cr[0]-m2*cr[1]-m1*cr[2]+m1*m2*cr[3])/((acc.EGt[1]+QF.live.EGt)*(acc.EGq[1]+QF.live.EGq)):0;
@@ -4040,12 +4056,15 @@ const rdS=(id,dev)=>Math.max(0,Math.min(1,(dev-20)/(devTop(id)-20)));
 const sgnQ=(v,d)=>(v>=0?"+":"−")+Math.abs(v).toFixed(d);
 /* 布局／中盤：以 20 局以上棋士的平均為 0（「比平均棋士每局多賺幾目」） */
 const qfC=id=>{const st=refSt(id);return st?st.m:0};
+/* 布局（2026-11-25 起）：名次、評價用合併分數（OPx），畫面上的大數字還是「每局比平均多賺幾目」（OPm）。
+   rank.json 還是舊格式（沒有 OPm）時，OPx 就是目差，照舊 */
+const OPNEW=()=>!!(RANK&&RANK.idx&&RANK.idx.OPm!=null&&RANK.qf&&RANK.qf.op);
 /* 顯示用的寫法。v＝顯示的量（官子＝每手虧損的目數）。short＝「平均｜1位」那一行（單位已經在大數字） */
 function qfFmt(id,v,short){
   if(v==null)return "—";
   const u=short?"":" 目";
   switch(id){
-    case "OPx":case "MGx":{const d=v-qfC(id);return (Math.abs(d)<0.05?"±0.0":sgnQ(d,1))+u}
+    case "OPx":case "MGx":{const d=v-qfC(id==="OPx"&&OPNEW()?"OPm":id);return (Math.abs(d)<0.05?"±0.0":sgnQ(d,1))+u}   /* 布局：v＝目差（OPm） */
     case "EGx":return (Math.abs(v)<0.005?"±0.00":sgnQ(v,2))+u;   /* v＝每手比平均多賺幾目 */
     case "Wx":return Math.max(0,v).toFixed(2)+"%";
     case "T1x":return v.toFixed(1)+"%";
@@ -4067,9 +4086,10 @@ function qfSay(id,v,V,short){
   const n=(x,d)=>Math.abs(x).toFixed(d);
   if(id==="EGx"){const r=egRel(V);if(r==null)return L[short?0:1];
     return short?`每手比平均${r>=0?"多":"少"}賺 ${n(r,2)} 目`:`收官（雙方差 15 目以內）時，每下一手比平均棋士${r>=0?"多":"少"}賺 ${n(r,2)} 目`}
+  if(id==="OPx"&&OPNEW())v=V&&V.OPm!=null?V.OPm:null;
   if(v==null)return L[short?0:1];
   switch(id){
-    case "OPx":case "MGx":{const d=v-qfC(id),ph=id==="OPx"?"布局（第 1–50 手）":"中盤（第 51–150 手）";
+    case "OPx":case "MGx":{const d=v-qfC(id==="OPx"&&OPNEW()?"OPm":id),ph=id==="OPx"?"布局（第 1–50 手）":"中盤（第 51–150 手）";
       return short?`每局比平均${d>=0?"多":"少"}賺 ${n(d,1)} 目`:`${ph}每局比平均棋士${d>=0?"多":"少"}賺 ${n(d,1)} 目`}
     case "Wx":return short?`每手勝率平均掉 ${n(v,2)}%`:`勝負未定時，每下一手勝率平均掉 ${n(v,2)}%（越少越好）`;
     case "T1x":return short?`考慮對手後 ${v.toFixed(1)}%`:`下出 AI 第一選擇的比例，依對手強弱調整後是 ${v.toFixed(1)}%`;
@@ -4088,10 +4108,11 @@ const egSub=V=>{const b=egBest(V);return b==null?"":`AI 最佳手 ${b.toFixed(0)
 const rfL=()=>regSel().length||S.rkMin!==20?"全體":"";
 function qfMain(id,v,V){
   if(id==="EGx"){const r=egRel(V);return r==null?(v==null?"—":v.toFixed(1)):qfFmt(id,r)}
+  if(id==="OPx"&&OPNEW())return V&&V.OPm!=null?qfFmt(id,V.OPm):"—";
   return qfFmt(id,v);
 }
 const QDESC={
-  OPx:"布局（第 1–50 手）：每局比平均棋士多賺幾目（已考慮對手強弱；20 局以上棋士的平均＝0）",
+  OPx:"布局（第 1–50 手）：每局比平均棋士多賺幾目（已考慮對手強弱；每局最多算 ±8 目；20 局以上棋士的平均＝0）。名次、評價是這個目數和「吻合扣失誤」（AI 首選 +2、前三選 +1、勝率掉 10 點以上扣分）一起評價的，比只看目數穩定",
   MGx:"中盤（第 51–150 手）：每局比平均棋士多賺幾目（已考慮對手強弱；20 局以上棋士的平均＝0）",
   EGx:"官子（151 手起）：雙方差 15 目以內時，每下一手比平均棋士多賺幾目（＝少虧幾目）（已考慮對手強弱；20 局以上棋士的平均＝0）。名次是這個數字和收官時下出 AI 最佳手的比例一起評價的",
   Wx:"失著：勝負未定（勝率 10–90%）時，每下一手勝率平均掉多少（越少越好）",
@@ -4110,7 +4131,9 @@ function qfRef(id){
     const rows=RANK.p.filter(r=>r[1]>=20&&r[i]!=null&&!isPairP(r[0])).sort((a,b)=>m.dir>0?a[i]-b[i]:b[i]-a[i]);   /* 由差到好（ペア不算） */
     if(rows.length){
       const best=rows[rows.length-1],q10=rows[Math.round(.9*(rows.length-1))],ix=RANK.idx,rv=r=>({EGt:r[ix.EGt],EGq:r[ix.EGq]});
-      if(id==="EGx"){const B=rows.map(r=>egBest(rv(r))).filter(x=>x!=null);
+      if(id==="OPx"&&OPNEW()){const om=r=>r[ix.OPm],ok=rows.filter(r=>om(r)!=null);
+        o={avgV:ok.length?ok.reduce((a,r)=>a+om(r),0)/ok.length:null,t10V:om(q10),topV:om(best),name:best[0],avgR:rows.reduce((a,r)=>a+r[i],0)/rows.length,t10R:q10[i],topR:best[i]}}
+      else if(id==="EGx"){const B=rows.map(r=>egBest(rv(r))).filter(x=>x!=null);
         o={avgV:0,t10V:egRel(rv(q10)),topV:egRel(rv(best)),name:best[0],avgR:rows.reduce((a,r)=>a+r[i],0)/rows.length,t10R:q10[i],topR:best[i],bAvg:B.length?B.reduce((a,b)=>a+b,0)/B.length:null,bT10:egBest(rv(q10)),bTop:egBest(rv(best))}}
       else{o={avgV:rows.reduce((a,r)=>a+r[i],0)/rows.length,t10V:q10[i],topV:best[i],name:best[0]};o.avgR=o.avgV;o.t10R=o.t10V;o.topR=o.topV}
     }
@@ -4317,7 +4340,7 @@ const RKSET=[
   {id:"MGx",nm:"中盤",sh:"中盤每局多賺幾目",d:"中盤（第 51–150 手）每局比平均棋士多賺幾目",good:"越多越強",u:"目／局"},
   {id:"Wx",nm:"失著",sh:"每手勝率掉多少",d:"勝負未定（勝率 10–90%）時，每下一手勝率平均掉多少（依對手強弱調整）",good:"越少越強",u:"每手"},
   {id:"EGx",nm:"官子",sh:"收官每手多賺幾目",d:"收官（雙方差 15 目以內）時每手比平均棋士多賺幾目，再加上下出 AI 最佳手的比例一起評價",good:"越多越強",u:"目／手・最佳手"},
-  {id:"OPx",nm:"布局",sh:"布局每局多賺幾目",d:"布局（第 1–50 手）每局比平均棋士多賺幾目",good:"越多越強",u:"目／局"},
+  {id:"OPx",nm:"布局",sh:"布局每局多賺幾目",d:"布局（第 1–50 手）每局比平均棋士多賺幾目，再加上和 AI 的吻合度、失誤一起評價",good:"越多越強",u:"目／局"},
   {id:"win",nm:"勝率",sh:"贏棋的比例（參考）",d:"贏棋的比例。不管對手強弱，只供參考",good:"越高越好",u:""}
 ];
 const rkSet=()=>RANK?RKSET.filter(x=>RANK.idx[x.id]!=null):[];
@@ -4338,6 +4361,7 @@ function cvSay(){
 function rkCell(r,id){
   const K=RANK.idx,v=r[K[id]];if(v==null)return "—";
   if(id==="EGx"){const rv={EGt:r[K.EGt],EGq:r[K.EGq]},e=egRel(rv),b=egBest(rv);return e==null?"—":qfFmt("EGx",e,1)+(b!=null?`<small> · 最佳手 ${b.toFixed(0)}%</small>`:"")}
+  if(id==="OPx"&&OPNEW()){const o=r[K.OPm];return o==null?"—":qfFmt(id,o,1)}
   const m=MI(id);return m.qf?qfFmt(id,v,1):v.toFixed(m.dec)+m.unit;
 }
 /* rows＝[[rank.json 的一列, 名次（null＝無名次）],…]，K0＝排序中的項目 */
@@ -4351,7 +4375,7 @@ function regPanel(){
   if(!RANK||!INDEX)return "";
   const K=RANK.idx,ids=["Rt","T1x","MGx","Wx","EGx","OPx"].filter(id=>K[id]!=null);
   if(!ids.length)return "";
-  const val=(id,r)=>id==="EGx"?egRel({EGq:r[K.EGq]}):r[K[id]];
+  const val=(id,r)=>id==="EGx"?egRel({EGq:r[K.EGq]}):id==="OPx"&&OPNEW()?r[K.OPm]:r[K[id]];
   const med=a=>{if(!a.length)return null;const b=[...a].sort((x,y)=>x-y);const h=b.length>>1;return b.length%2?b[h]:(b[h-1]+b[h])/2};
   const rows=REGO.map(k=>{
     const pool=regPool(S.rkMin,k);
@@ -4435,7 +4459,7 @@ function prkBuild(){
       return{raw:G.raw,sz:19,c:x.c,opp:x.opp,win:G.win==null?null:G.win===x.c,hasWR:G.hw}});
     const v=qfVals(gl),row=new Array(K.length).fill(null),dec=gl.filter(g=>g.win!=null);
     row[0]=nm;row[1]=gl.length;
-    ["Rt","T1x","Wx","OPx","MGx","EGx","EGt","EGq"].forEach(k=>{if(ix[k]!=null&&v[k]!=null)row[ix[k]]=v[k]});
+    ["Rt","T1x","Wx","OPx","MGx","EGx","EGt","EGq","OPm","OPa"].forEach(k=>{if(ix[k]!=null&&v[k]!=null)row[ix[k]]=v[k]});
     if(ix.win!=null&&dec.length)row[ix.win]=Math.round(dec.filter(g=>g.win).length/dec.length*1000)/10;
     rows.push(row);
   });
@@ -5621,7 +5645,8 @@ function rbRankBase(games){
   return{min:MIN,std:{p1:P1,p2:P2},mth:MTH,n:rows.length,k:keys,p:rows};
 }
 
-/* q_gen.js：扣除對手強度的 10 欄（Rt,T1x,Wx,OPx,MGx,EGx,EGt,EGq,θT1,θW）與 rank.qf。
+/* q_gen.js：扣除對手強度的 12 欄（Rt,T1x,Wx,OPx,MGx,EGx,EGt,EGq,θT1,θW,OPm,OPa）與 rank.qf。
+   2026-11-25 起 OPx＝布局合併分數（偏差值），OPm＝原本的布局目差（每局 ±8），OPa＝吻合扣失誤（q_gen.js 還沒有跟著改）。
    Q＝{QF,qfGame,QFS,qfPair,qfPerf}（瀏覽器裡就是頁面 @@QF 區塊的全域函式）。gen 省略時＝今天（UTC，與 q_gen.js 相同）。
    回傳 {cols:{棋士名→[10 個值]}, qf:{gen,mu,anchor,eg,cv}, info:{cg,sweeps,maxChange}} */
 function rbQF(games,Q,gen){
@@ -5708,14 +5733,31 @@ function rbQF(games,Q,gen){
   const comp=nm=>{const a=V.EGt.get(nm),b=V.EGq.get(nm);return a==null||b==null?null:(a-mt)/sdt+(b-mq)/sdq};
   const cv=[];names.forEach(nm=>{if(nG.get(nm)>=20){const c=comp(nm);if(c!=null)cv.push(c)}});
   const cm=cv.reduce((a,b)=>a+b,0)/cv.length,csd=Math.sqrt(cv.reduce((a,b)=>a+(b-cm)**2,0)/cv.length);
+  /* 布局＝研究室算法（目差＋對手強弱，V.OP）＋吻合扣失誤，兩者換成標準分數相加的偏差值（μ・σ 是 20 局以上的棋士）。
+     吻合扣失誤＝(得分合計＋K×全體每手平均)÷(手數＋K) − β×(碰到的對手平均布局分數 − 全體平均)；
+     β＝每個人跟自己比，碰到強對手的那幾盤每手得分低多少，全體合起來估一個（照手數加權） */
+  let sA=0,sN=0;F.forEach(f=>{for(const c of["B","W"]){sA+=f[c].ma;sN+=f[c].mn}});
+  const omu=sN?sA/sN:0,mA=new Map();let oS=0,oN=0,sxy=0,sxx=0;
+  byP.forEach((ix,nm)=>{let a=0,m=0,os=0,on=0;const it=[];
+    for(const i of ix){const g=G[i],me=g.b===nm?"B":"W",t=V.OP.get(me==="B"?g.w:g.b);if(t==null)continue;const s=F[i][me];a+=s.ma;m+=s.mn;os+=t;on++;if(s.mn)it.push([s.ma/s.mn,t,s.mn])}
+    if(on){mA.set(nm,[a,m,os/on]);oS+=os;oN+=on}
+    if(it.length>1){let W=0,y=0,o=0;it.forEach(q=>{W+=q[2];y+=q[2]*q[0];o+=q[2]*q[1]});y/=W;o/=W;it.forEach(q=>{sxy+=q[2]*(q[0]-y)*(q[1]-o);sxx+=q[2]*(q[1]-o)**2})}});
+  const oMean=oN?oS/oN:0,beta=sxx?sxy/sxx:0,OK=Q.QF.opK;
+  const OPA=new Map();mA.forEach(([a,m,o],nm)=>OPA.set(nm,(a+OK*omu)/(m+OK)-beta*(o-oMean)));
+  const sttM=M=>{const v=[];M.forEach((x,nm)=>{if(nG.get(nm)>=20)v.push(x)});const m=v.reduce((a,b)=>a+b,0)/v.length;return[m,Math.sqrt(v.reduce((a,b)=>a+(b-m)**2,0)/v.length)]};
+  const[pm,sdp]=sttM(V.OP),[pa,sda]=sttM(OPA);
+  const opc=nm=>{const a=V.OP.get(nm),b=OPA.get(nm);return a==null||b==null?null:(a-pm)/sdp+(b-pa)/sda};
+  const ocv=[];names.forEach(nm=>{if(nG.get(nm)>=20){const c=opc(nm);if(c!=null)ocv.push(c)}});
+  const ocm=ocv.reduce((a,b)=>a+b,0)/ocv.length,ocsd=Math.sqrt(ocv.reduce((a,b)=>a+(b-ocm)**2,0)/ocv.length);
   const rd=(v,d)=>v==null||!isFinite(v)?null:Math.round(v*10**d)/10**d;
   const cols=Object.create(null);
   names.forEach(nm=>{
-    const c=comp(nm);
+    const c=comp(nm),oc=opc(nm);
     cols[nm]=[rd(R.has(nm)&&byP.has(nm)&&hasRes(nm)?elo(R.get(nm)):null,2),rd(V.T1.has(nm)?V.T1.get(nm)*100:null,4),rd(V.W.has(nm)?-V.W.get(nm):null,4),
-      rd(V.OP.get(nm),4),rd(V.MG.get(nm),4),rd(c==null?null:50+10*(c-cm)/csd,3),rd(V.EGt.get(nm),6),rd(V.EGq.get(nm),6),rd(TH.T1.get(nm),6),rd(TH.W.get(nm),6)];
+      rd(oc==null?null:50+10*(oc-ocm)/ocsd,3),rd(V.MG.get(nm),4),rd(c==null?null:50+10*(c-cm)/csd,3),rd(V.EGt.get(nm),6),rd(V.EGq.get(nm),6),rd(TH.T1.get(nm),6),rd(TH.W.get(nm),6),
+      rd(V.OP.get(nm),4),rd(OPA.get(nm),5)];
   });
-  return{cols,qf:{gen:gen||new Date().toISOString().slice(0,10),mu,anchor,eg:{mt,sdt,mq,sdq,cm,csd},
+  return{cols,qf:{gen:gen||new Date().toISOString().slice(0,10),mu,anchor,eg:{mt,sdt,mq,sdq,cm,csd},op:{mu:omu,beta,om:oMean,k:OK,pm,sdp,pa,sda,cm:ocm,csd:ocsd},
     /* 5 分割交差検証の正解率（q_gen.js の定数をそのまま） */
     cv:{Rt:65.3,T1x:65.1,MGx:64.8,Wx:64.6,EGx:61.6,OPx:60.6,s3a:63.5,sa:63.2,K10a:62.2,s3e:59.3,win:59.9}},info};
 }
@@ -5723,7 +5765,7 @@ function rbQF(games,Q,gen){
 /* rank.json 全体＝rank.py の列＋q_gen.js の 10 列（現行 rank.json と同じ列順）。gen は rank.qf.gen */
 function rbRank(games,Q,gen){
   const base=rbRankBase(games),qf=rbQF(games,Q,gen);
-  const NEW=["Rt","T1x","Wx","OPx","MGx","EGx","EGt","EGq","θT1","θW"],nul=NEW.map(()=>null);
+  const NEW=["Rt","T1x","Wx","OPx","MGx","EGx","EGt","EGq","θT1","θW","OPm","OPa"],nul=NEW.map(()=>null);
   return{min:base.min,std:base.std,mth:base.mth,n:base.n,k:base.k.concat(NEW),
     p:base.p.map(r=>r.concat(qf.cols[r[0]]||nul)),qf:qf.qf};
 }
@@ -6028,7 +6070,7 @@ const dbNow=k=>{const t=new Date(),pad=n=>String(n).padStart(2,"0"),day=`${t.get
    做法和 me-admin.html 的 buildPkg 相同：meta/pubkeys 裡有金鑰的棋士，每人重寫一份 pub/<金鑰>
    （他的對局、對手算「對手強弱」要的幾欄、其他棋士換成代號的排名母體）。
    還沒建過任何連結時不做事；失敗不影響剛才的上傳，只在訊息後面提醒到限制版管理頁補做 */
-const ME_OPP_COLS=["θT1","θW","OPx","MGx","EGt","EGq","Rt"];
+const ME_OPP_COLS=["θT1","θW","OPx","MGx","EGt","EGq","Rt","OPm"];
 function mePkg(name,shards){
   const p=INDEX.players.find(x=>x[0]===name);if(!p||!RANK)return null;
   const recs=(shards[p[2]]||[]).filter(r=>r&&(r.b===name||r.w===name));

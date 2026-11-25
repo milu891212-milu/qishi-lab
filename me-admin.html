@@ -62,7 +62,7 @@ const PLAYERS_URL="https://cpga.org.tw/assets/data/players.json";
 const ME_URL=new URL("me/",location.href).href;
 const FS_CHUNK=900000;
 /* 對手強弱計算要用的欄位（完整版 qfVals 讀的 θ、等級分…），其他欄位不給 */
-const OPP_COLS=["θT1","θW","OPx","MGx","EGt","EGq","Rt"];
+const OPP_COLS=["θT1","θW","OPx","MGx","EGt","EGq","Rt","OPm"];
 const app=firebase.initializeApp(FB_CONFIG,"qishi-lab"),auth=app.auth(),db=app.firestore(),B=firebase.firestore.Blob;
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
