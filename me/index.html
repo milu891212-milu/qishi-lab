@@ -3935,7 +3935,7 @@ function qfGame(mv){
     const wb=cl(bl?wB[k]:100-wB[k],0,100),wa=cl(bl?wB[k+1]:100-wB[k+1],0,100);
     if(anyW&&wb>=10&&wb<=90){S.nW++;S.W+=Math.max(0,wb-wa)}
     /* 布局的「吻合扣失誤」（第 1–50 手、有 AI 順位的手）：AI 首選 +2、第 2–3 選 +1；這手讓自己勝率掉 10／20／30 點以上 −2／−4／−6 */
-    if(k<50&&m.srank!=null){const d=anyW?wb-wa:0;S.ma+=(m.srank===1?2:m.srank<=3?1:0)-2*(d>=30?3:d>=20?2:d>=10?1:0);S.mn++}
+    if(k<50&&m.srank!=null){const d=anyW?wb-wa:0;S.ma+=(m.srank===1?2:m.srank===2||m.srank===3?1:0)-2*(d>=30?3:d>=20?2:d>=10?1:0);S.mn++}
     if(eg&&k+1<N){const sb=m.score,sa=mv[k+1].score;
       if(sb!=null&&sa!=null){const b=bl?sb:-sb,a=bl?sa:-sa;if(Math.abs(b)<=15){S.nQ++;S.q+=cl(b-a,-10,10)}}}
   }
